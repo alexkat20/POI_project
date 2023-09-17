@@ -10,7 +10,6 @@ from selenium.webdriver.support.wait import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support import expected_conditions as EC
 
-# Миасс, проспект Автозаводцев, 21
 
 class GrabberApp:
 
@@ -54,93 +53,101 @@ class GrabberApp:
         sleep(2)
 
         parent_handle = driver.window_handles[0]
+        i = 6
 
-        i = 1
         while i:
             sleep(1)
+            url = None
 
-            try:
-                page = driver.find_element(
-                    By.XPATH, f'(//a[contains(@class,"search-business-snippet-view__rating")])[{i}]'
-                )
-                print(page.get_attribute("href"))
-            except:
-                WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located(
-                        (By.XPATH, f'(//div[contains(@class,"search-business-snippet-view__title")])[{i}]')
-                    )
-                )
-                driver.find_element(
-                    By.XPATH, f'(//div[contains(@class,"search-business-snippet-view__title")])[{i}]'
-                ).location_once_scrolled_into_view
-                i += 1
-                continue
-
-
-
-
-            url = page.get_attribute("href")
-
-            page.location_once_scrolled_into_view
-
-            driver.execute_script(f'window.open("{url}","org_tab");')
-
-            child_handle = [x for x in driver.window_handles if x != parent_handle][0]
-            driver.switch_to.window(child_handle)
-
-            sleep(2)
             try:
                 WebDriverWait(driver, 10).until(
                     EC.presence_of_element_located(
-                        (By.XPATH, f'(//div[contains(@class,"tabs-select-view__title _name_reviews _selected")])')
+                        (By.XPATH, f'(//div[contains(@class,"search-business-snippet-view__content")])[{i}]')
                     )
                 )
+                org_info = driver.find_element(
+                    By.XPATH, f'(//div[contains(@class,"search-business-snippet-view__content")])[{i}]'
+                )
 
-                review_number = driver.find_element(
-                    By.XPATH, f'(//div[contains(@class,"tabs-select-view__title _name_reviews _selected")])'
-                ).get_attribute("aria-label").split(", ")[1]
+                org_name = org_info.text.split("\n")[:3]
+                if org_name[0].isdigit():
+                    org_name = org_name[1:]
+                else:
+                    org_name = org_name[:2]
+                print(*org_name)
+                elements = org_info.find_elements(By.TAG_NAME, "a")
+                for el in elements:
+                    link = el.get_attribute("href")
+                    if "review" in link:
+                        url = link
 
-                print(review_number)
+                org_info.location_once_scrolled_into_view
+                if not url:
+                    i += 1
+                    continue
+                driver.execute_script(f'window.open("{url}","org_tab");')
 
-                j = 0
-            except:
+                child_handle = [x for x in driver.window_handles if x != parent_handle][0]
+                driver.switch_to.window(child_handle)
+
+                sleep(2)
+                try:
+                    WebDriverWait(driver, 10).until(
+                        EC.presence_of_element_located(
+                            (By.XPATH, f'(//div[contains(@class,"tabs-select-view__title _name_reviews _selected")])')
+                        )
+                    )
+
+                    review_number = driver.find_element(
+                        By.XPATH, f'(//div[contains(@class,"tabs-select-view__title _name_reviews _selected")])'
+                    ).get_attribute("aria-label").split(", ")[1]
+
+                    print(review_number)
+
+                    j = 0
+                except:
+                    driver.close()
+                    driver.switch_to.window(parent_handle)
+                    sleep(1)
+
+                    i += 1
+                    continue
+                while j != int(review_number):
+                    if j % 20 == 0:
+                        sleep(2)
+                    WebDriverWait(driver, 10).until(
+                        EC.presence_of_element_located(
+                            (By.XPATH, f'(//span[contains(@class,"business-review-view__body-text")])[{j + 1}]')
+                        )
+                    )
+
+                    review = driver.find_element(
+                        By.XPATH, f'(//span[contains(@class,"business-review-view__body-text")])[{j + 1}]'
+                    )
+
+                    review.location_once_scrolled_into_view
+
+                    date = driver.find_element(
+                        By.XPATH, f'(//span[contains(@class,"business-review-view__date")])[{j + 1}]'
+                    )
+
+                    print(review.text, date.text)
+
+                    if len(date.text.split()) > 2:
+                        break
+
+                    j += 1
+
                 driver.close()
                 driver.switch_to.window(parent_handle)
                 sleep(1)
 
                 i += 1
-                continue
-            while j != int(review_number):
-                if j % 10 == 0:
-                    sleep(2)
-                WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located(
-                        (By.XPATH, f'(//span[contains(@class,"business-review-view__body-text")])[{j+1}]')
-                    )
-                )
 
-                review = driver.find_element(
-                    By.XPATH, f'(//span[contains(@class,"business-review-view__body-text")])[{j + 1}]'
-                )
+            except:
+                break
 
-                review.location_once_scrolled_into_view
 
-                date = driver.find_element(
-                    By.XPATH, f'(//span[contains(@class,"business-review-view__date")])[{j + 1}]'
-                )
-
-                print(review.text, date.text)
-
-                if len(date.text.split()) > 2:
-                    break
-
-                j += 1
-
-            driver.close()
-            driver.switch_to.window(parent_handle)
-            sleep(1)
-
-            i += 1
 
         driver.quit()
 
