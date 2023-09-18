@@ -12,6 +12,12 @@ def geocode_null_addresses(row):
 
     return location
 
+
+def get_centroid(row):
+    centroid = row["geometry"].centroid
+
+    return centroid
+
 @task
 def get_city_geometry(city: str):
     import osmnx as ox
@@ -28,16 +34,18 @@ def get_all_buildings(territory: str):
     buildings = ox.geometries_from_place(territory, {"building": True})
     buildings = buildings.reset_index()
 
+    buildings["centroid"] = buildings.apply(get_centroid, axis=1)
+
     buildings["lat"] = buildings.centroid.y
     buildings["lon"] = buildings.centroid.x
 
     buildings = buildings.set_crs(4326)
-    cols = ["name", "geometry", "addr:street", "addr:housenumber", "centroid", "building", "lat", "lon"]
+    cols = ["name", "geometry", "addr:street", "addr:housenumber", "centroid", "lat", "lon"]
 
     buildings_with_addresses = buildings[~buildings["addr:housenumber"].isna()][cols]
     buildings_without_addresses = buildings[buildings["addr:housenumber"].isna()][cols]
 
-    return buildings_with_addresses, buildings_without_addresses
+    return buildings_with_addresses[["addr:street", "addr:housenumber"]], buildings_without_addresses
 
 
 @task
@@ -48,13 +56,10 @@ def geocode_buildings(buildings):
 
 
 @flow(retries=3, retry_delay_seconds=5, log_prints=True)
-def get_city_buildings(city_name: str):
+def get_city_buildings(city_name: str = "Миасс, Челябинская область"):
     city_geometry = get_city_geometry(city_name)
     buildings_with_addresses, buildings_without_addresses = get_all_buildings(city_name)
     city_geometry.to_file('city_geometry.geojson', driver='GeoJSON')
-    buildings_with_addresses.to_file('buildings_with_addresses.geojson', driver='GeoJSON')
-    buildings_without_addresses.to_file('buildings_without_addresses.geojson', driver='GeoJSON')
-
-
-
-
+    print(buildings_with_addresses)
+    buildings_with_addresses.to_csv('buildings_with_addresses.csv')
+    #  buildings_without_addresses.to_file('buildings_without_addresses.geojson', driver='GeoJSON')
