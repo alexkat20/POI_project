@@ -3,6 +3,11 @@ from airflow import DAG
 
 from airflow.operators.python import PythonOperator
 from datetime import timedelta
+import pip
+
+pip.main(['install', "osmnx"])
+pip.main(['install', "geopandas"])
+pip.main(['install', "geopy"])
 
 
 default_args = {
@@ -42,7 +47,7 @@ with DAG(
 
         return location
 
-    def get_city_geometry(city: str):
+    def get_city_geometry(city: str = "Миасс, Челябинская область"):
         import osmnx as ox
 
         territory = ox.geocode_to_gdf(city)
@@ -50,7 +55,7 @@ with DAG(
         territory.to_file('city_geometry.geojson', driver='GeoJSON')
 
 
-    def get_all_buildings(territory: str):
+    def get_all_buildings(territory: str = "Миасс, Челябинская область"):
         import osmnx as ox
 
         buildings = ox.geometries_from_place(territory, {"building": True})
