@@ -47,6 +47,12 @@ with DAG(
 
         return location
 
+
+    def get_centroid(row):
+        centroid = row["geometry"].centroid
+
+        return centroid
+
     def get_city_geometry(city: str = "Миасс, Челябинская область"):
         import osmnx as ox
 
@@ -61,11 +67,13 @@ with DAG(
         buildings = ox.geometries_from_place(territory, {"building": True})
         buildings = buildings.reset_index()
 
+        buildings["centroid"] = buildings.apply(get_centroid, axis=1)
+
         buildings["lat"] = buildings.centroid.y
         buildings["lon"] = buildings.centroid.x
 
         buildings = buildings.set_crs(4326)
-        cols = ["name", "geometry", "addr:street", "addr:housenumber", "centroid", "building", "lat", "lon"]
+        cols = ["name", "geometry", "addr:street", "addr:housenumber", "centroid", "lat", "lon"]
 
         buildings_with_addresses = buildings[~buildings["addr:housenumber"].isna()][cols]
         buildings_without_addresses = buildings[buildings["addr:housenumber"].isna()][cols]
