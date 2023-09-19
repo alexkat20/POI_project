@@ -19,7 +19,7 @@ def get_centroid(row):
     return centroid
 
 @task
-def get_city_geometry(city: str):
+def get_city_geometry(city: str = "Миасс, Челябинская область"):
     import osmnx as ox
 
     territory = ox.geocode_to_gdf(city)
@@ -28,7 +28,7 @@ def get_city_geometry(city: str):
 
 
 @task
-def get_all_buildings(territory: str):
+def get_all_buildings(territory: str = "Миасс, Челябинская область"):
     import osmnx as ox
 
     buildings = ox.geometries_from_place(territory, {"building": True})
@@ -61,5 +61,5 @@ def get_city_buildings(city_name: str = "Миасс, Челябинская об
     buildings_with_addresses, buildings_without_addresses = get_all_buildings(city_name)
     city_geometry.to_file('city_geometry.geojson', driver='GeoJSON')
     print(buildings_with_addresses)
-    buildings_with_addresses.to_csv('buildings_with_addresses.csv')
+    #  buildings_with_addresses.to_csv('buildings_with_addresses.csv')
     #  buildings_without_addresses.to_file('buildings_without_addresses.geojson', driver='GeoJSON')
