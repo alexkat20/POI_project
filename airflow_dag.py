@@ -1,4 +1,5 @@
 import airflow
+import pandas as pd
 from airflow import DAG
 
 from airflow.operators.python import PythonOperator
@@ -45,6 +46,9 @@ with DAG(
 
         location = geolocator.reverse(f"{lat}, {lon}")
 
+        address = location.split(", ")
+        print(", ".join(address))
+
         return location
 
 
@@ -73,19 +77,38 @@ with DAG(
         buildings["lon"] = buildings.centroid.x
 
         buildings = buildings.set_crs(4326)
+
+        buildings.to_csv("buildings.csv")
+        print(buildings)
+
+    def split_buildings():
+        import pandas as pd
+
+        buildings = pd.read_csv("buildings.csv")
+
         cols = ["name", "geometry", "addr:street", "addr:housenumber", "centroid", "lat", "lon"]
 
         buildings_with_addresses = buildings[~buildings["addr:housenumber"].isna()][cols]
         buildings_without_addresses = buildings[buildings["addr:housenumber"].isna()][cols]
 
-        buildings_with_addresses[["name", "addr:street", "addr:housenumber"]].to_csv("buildings_with_addresses.csv")
-        #  buildings_without_addresses.to_file("buildings_without_addresses.geojson", driver="GeoJSON)
+        #  buildings_with_addresses[["name", "addr:street", "addr:housenumber"]].to_csv("buildings_with_addresses.csv")
+        #  buildings_without_addresses.to_file("buildings_without_addresses.geojson", driver="GeoJSON")
+
+        buildings_with_addresses.to_csv("buildings_with_addresses.csv")
+        buildings_without_addresses.to_csv("buildings_without_addresses.to_csv")
+        print(buildings_without_addresses)
 
 
-    def geocode_buildings(buildings):
+    def geocode_buildings():
+        import pandas as pd
+
+        buildings = pd.read_csv("buildings_without_addresses.csv")
+
         buildings["adddress"] = buildings.apply(geocode_null_addresses, axis=1)
 
-        return geocode_buildings
+        print(buildings)
+
+        buildings.to_csv("geocoded_buildings_without_addresses.csv")
 
 
     get_city_geometry_task = PythonOperator(
@@ -100,5 +123,17 @@ with DAG(
         provide_context=True,
     )
 
+    split_buildings_task = PythonOperator(
+        task_id="split_buildings",
+        python_callable=split_buildings,
+        provide_context=True,
+    )
 
-get_city_geometry_task >> get_all_buildings_task
+    geocode_buildings_task = PythonOperator(
+        task_id="geocode_buildings",
+        python_callable=geocode_buildings,
+        provide_context=True,
+    )
+
+
+get_city_geometry_task >> get_all_buildings_task >> split_buildings_task >> geocode_buildings_task
