@@ -4,11 +4,11 @@ from airflow import DAG
 
 from airflow.operators.python import PythonOperator
 from datetime import timedelta
-import pip
+#  import pip
 
-pip.main(['install', "osmnx"])
-pip.main(['install', "geopandas"])
-pip.main(['install', "geopy"])
+#  pip.main(['install', "osmnx"])
+#  pip.main(['install', "geopandas"])
+#  pip.main(['install', "geopy"])
 
 
 default_args = {
@@ -25,7 +25,7 @@ default_args = {
     "retry_delay": timedelta(minutes=5),
 }
 
-#  IMAGE = "registry.neomsa.ru/docker-mlops/mlops/airflow:2.2.5-demo-v4"
+IMAGE = "alexkat2000/poi_images:v1"
 
 with DAG(
     dag_id="POI_DAG",
