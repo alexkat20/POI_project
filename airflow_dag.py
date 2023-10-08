@@ -4,11 +4,14 @@ from airflow import DAG
 
 from airflow.operators.python import PythonOperator
 from datetime import timedelta
-#  import pip
+from kubernetes.client import models as k8s
+import pip
+import geopandas as gpd
 
 #  pip.main(['install', "osmnx"])
 #  pip.main(['install', "geopandas"])
-#  pip.main(['install', "geopy"])
+pip.main(['install', "osmnx"])
+pip.main(['uninstall', "pyOpenSSL"])
 
 
 default_args = {
@@ -25,7 +28,7 @@ default_args = {
     "retry_delay": timedelta(minutes=5),
 }
 
-IMAGE = "alexkat2000/poi_images:v1"
+#  IMAGE = "alexkat2000/poi_images:v1"
 
 with DAG(
     dag_id="POI_DAG",
@@ -39,15 +42,18 @@ with DAG(
 ) as dag:
     def geocode_null_addresses(row):
         from geopy.geocoders import Nominatim
+
         geolocator = Nominatim(user_agent="POI_app")
-        centroid = row["geometry"].centroid
-        lat = centroid.y
-        lon = centroid.x
+        lat = row["lat"]
+        lon = row["lon"]
 
-        location = geolocator.reverse(f"{lat}, {lon}")
+        try:
+            location = geolocator.reverse(f"{lat}, {lon}")
+        except:
+            location = "Undefined"
 
-        address = location.split(", ")
-        print(", ".join(address))
+        address = str(location).split(", ")
+        print(", ".join(address[:3]))
 
         return location
 
@@ -62,7 +68,9 @@ with DAG(
 
         territory = ox.geocode_to_gdf(city)
 
-        territory.to_file('city_geometry.geojson', driver='GeoJSON')
+        print(territory)
+
+        #  territory.to_file('city_geometry.geojson', driver='GeoJSON')
 
 
     def get_all_buildings(territory: str = "Миасс, Челябинская область"):
@@ -78,13 +86,13 @@ with DAG(
 
         buildings = buildings.set_crs(4326)
 
-        buildings.to_csv("buildings.csv")
+        buildings.to_csv("/opt/airflow/dags/buildings.csv")
         print(buildings)
 
     def split_buildings():
         import pandas as pd
 
-        buildings = pd.read_csv("buildings.csv")
+        buildings = pd.read_csv("/opt/airflow/dags/buildings.csv")
 
         cols = ["name", "geometry", "addr:street", "addr:housenumber", "centroid", "lat", "lon"]
 
@@ -94,27 +102,28 @@ with DAG(
         #  buildings_with_addresses[["name", "addr:street", "addr:housenumber"]].to_csv("buildings_with_addresses.csv")
         #  buildings_without_addresses.to_file("buildings_without_addresses.geojson", driver="GeoJSON")
 
-        buildings_with_addresses.to_csv("buildings_with_addresses.csv")
-        buildings_without_addresses.to_csv("buildings_without_addresses.to_csv")
+        buildings_with_addresses.to_csv("/opt/airflow/dags/buildings_with_addresses.csv")
+        buildings_without_addresses.to_csv("/opt/airflow/dags/buildings_without_addresses.csv")
         print(buildings_without_addresses)
 
 
     def geocode_buildings():
         import pandas as pd
+        import geopandas as gpd
 
-        buildings = pd.read_csv("buildings_without_addresses.csv")
-
+        buildings = pd.read_csv("/opt/airflow/dags/buildings_without_addresses.csv")
+        print(buildings)
         buildings["adddress"] = buildings.apply(geocode_null_addresses, axis=1)
 
         print(buildings)
 
-        buildings.to_csv("geocoded_buildings_without_addresses.csv")
+        buildings.to_csv("/opt/airflow/dags/geocoded_buildings_without_addresses.csv")
 
 
     get_city_geometry_task = PythonOperator(
         task_id="get_city_geometry",
         python_callable=get_city_geometry,
-        provide_context=True
+        provide_context=True,
     )
 
     get_all_buildings_task = PythonOperator(
@@ -134,6 +143,5 @@ with DAG(
         python_callable=geocode_buildings,
         provide_context=True,
     )
-
 
 get_city_geometry_task >> get_all_buildings_task >> split_buildings_task >> geocode_buildings_task
