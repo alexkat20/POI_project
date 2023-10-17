@@ -9,12 +9,14 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support import expected_conditions as EC
+import pandas as pd
 
 
 class GrabberApp:
 
     def __init__(self, city):
         self.city = city
+        self.df = pd.DataFrame({"review": [], "date": []})
 
     def grab_data(self):
         # chrome_options = webdriver.ChromeOptions
@@ -51,6 +53,11 @@ class GrabberApp:
             By.XPATH, f'(//div[contains(@class,"tabs-select-view__title _name_inside")])'
         ).click()
         sleep(2)
+
+        driver.find_element(
+            By.XPATH, f'(//div[contains(@class,"rating-ranking-view")])'
+        ).click()
+        sleep(5)
 
         parent_handle = driver.window_handles[0]
         i = 6
@@ -132,6 +139,7 @@ class GrabberApp:
                     )
 
                     print(review.text, date.text)
+                    self.df.loc[len(self.df)] = {"review": review.text, "date": date.text}
 
                     if len(date.text.split()) > 2:
                         break
