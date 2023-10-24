@@ -82,15 +82,6 @@ class GrabberApp:
                 org_info = self.driver.find_element(
                     By.XPATH, f'(//div[contains(@class,"search-business-snippet-view__content")])[{i}]'
                 )
-                org_name = org_info.text.split("\n")[:3]
-                if org_name[0].isdigit():
-                    org_name = org_name[1:2]
-                else:
-                    org_name = org_name[:2]
-                if len(org_name) == 0:
-                    i += 1
-                    continue
-                print(org_name)
                 elements = org_info.find_elements(By.TAG_NAME, "a")
                 for el in elements:
                     link = el.get_attribute("href")
@@ -130,7 +121,12 @@ class GrabberApp:
 
                     i += 1
                     continue
+                self.wait_for_presence(f'(//h1[contains(@class,"orgpage-header-view__header")])')
 
+                place = self.driver.find_element(
+                    By.XPATH, f'(//h1[contains(@class,"orgpage-header-view__header")])'
+                )
+                print(place.text)
                 while j != int(review_number):
                     if j % 20 == 0:
                         sleep(2)
@@ -148,7 +144,7 @@ class GrabberApp:
                     )
 
                     #  print(review.text, date.text)
-                    self.df.loc[len(self.df)] = {"place": " ".join(org_name), "review": review.text, "date": date.text}
+                    self.df.loc[len(self.df)] = {"place": place.text, "review": review.text, "date": date.text}
 
                     if len(date.text.split()) > 2:
                         i += 1
@@ -173,7 +169,6 @@ def main():
     city = input('Область поиска: ')
     grabber = GrabberApp(city)
     data = grabber.grab_data()
-    data = data.dropna(how="all", subset=["place"], ignore_index=True)
     data.to_csv("data.csv")
 
 
