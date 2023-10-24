@@ -42,8 +42,11 @@ with DAG(
 ) as dag:
     def geocode_null_addresses(row):
         from geopy.geocoders import Nominatim
+        import geopy
 
-        geolocator = Nominatim(user_agent="POI_app")
+        API_KEY = " Avs8af3bGJxAbDECx-tEiM3C53lXeIOCX53-SV-StILZI6OUJq_F4wZ6kIS2RPWn"
+        #  geolocator = Nominatim(user_agent="POI_app")
+        geolocator = geopy.geocoders.Bing(API_KEY)
         lat = row["lat"]
         lon = row["lon"]
 
