@@ -7,9 +7,12 @@ from datetime import timedelta
 from kubernetes.client import models as k8s
 import pip
 import geopandas as gpd
+from tqdm import tqdm
+tqdm.pandas()
 
-#  pip.main(['install', "osmnx"])
-#  pip.main(['install', "geopandas"])
+from pandarallel import pandarallel
+pandarallel.initialize(progress_bar=True)
+
 pip.main(['install', "osmnx"])
 pip.main(['uninstall', "pyOpenSSL"])
 
@@ -116,7 +119,8 @@ with DAG(
 
         buildings = pd.read_csv("/opt/airflow/dags/buildings_without_addresses.csv")
         print(buildings)
-        buildings["adddress"] = buildings.apply(geocode_null_addresses, axis=1)
+        #  buildings["adddress"] = buildings.apply(geocode_null_addresses, axis=1)
+        buildings["adddress"] = buildings.parallel_apply(geocode_null_addresses, axis=1)
 
         print(buildings)
 
