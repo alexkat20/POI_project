@@ -4,14 +4,6 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import timedelta
 
-from tqdm import tqdm
-
-tqdm.pandas()
-
-from pandarallel import pandarallel
-
-pandarallel.initialize(progress_bar=True)
-
 
 default_args = {
     "owner": "Alexander Katynsus",
@@ -115,9 +107,11 @@ with DAG(
 
         buildings = buildings.loc[:length]
 
-        buildings["adddress"] = buildings.apply(geocode_null_addresses, axis=1)
+        buildings["address"] = buildings.apply(geocode_null_addresses, axis=1)
 
         print(buildings)
+
+        buildings = buildings.drop_duplicates(["address"], ignore_index=True)
 
         buildings.to_csv("/opt/airflow/dags/geocoded_buildings_without_addresses_part1.csv")
 
@@ -130,9 +124,11 @@ with DAG(
 
         buildings = buildings.loc[length : length * 2]
 
-        buildings["adddress"] = buildings.apply(geocode_null_addresses, axis=1)
+        buildings["address"] = buildings.apply(geocode_null_addresses, axis=1)
 
         print(buildings)
+
+        buildings = buildings.drop_duplicates(["address"], ignore_index=True)
 
         buildings.to_csv("/opt/airflow/dags/geocoded_buildings_without_addresses_part2.csv")
 
@@ -142,10 +138,12 @@ with DAG(
         buildings = pd.read_csv("/opt/airflow/dags/buildings_without_addresses.csv")
         length = len(buildings) // 4
 
-        buildings = buildings.loc[length * 2 : length * 3]
-        buildings["adddress"] = buildings.apply(geocode_null_addresses, axis=1)
+        buildings = buildings.loc[length * 2: length * 3]
+        buildings["address"] = buildings.apply(geocode_null_addresses, axis=1)
 
         print(buildings)
+
+        buildings = buildings.drop_duplicates(["address"], ignore_index=True)
 
         buildings.to_csv("/opt/airflow/dags/geocoded_buildings_without_addresses_part3.csv")
 
@@ -156,9 +154,11 @@ with DAG(
         length = len(buildings) // 4
 
         buildings = buildings.loc[length * 3 :]
-        buildings["adddress"] = buildings.apply(geocode_null_addresses, axis=1)
+        buildings["address"] = buildings.apply(geocode_null_addresses, axis=1)
 
         print(buildings)
+
+        buildings = buildings.drop_duplicates(["address"], ignore_index=True)
 
         buildings.to_csv("/opt/airflow/dags/geocoded_buildings_without_addresses_part4.csv")
 
