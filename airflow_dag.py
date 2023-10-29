@@ -1,12 +1,9 @@
 import airflow
-import pandas as pd
 from airflow import DAG
 
 from airflow.operators.python import PythonOperator
 from datetime import timedelta
-from kubernetes.client import models as k8s
-import pip
-import geopandas as gpd
+
 from tqdm import tqdm
 
 tqdm.pandas()
@@ -30,7 +27,6 @@ default_args = {
     "retry_delay": timedelta(minutes=5),
 }
 
-#  IMAGE = "alexkat2000/poi_images:v1"
 
 with DAG(
     dag_id="POI_DAG",
@@ -61,7 +57,7 @@ with DAG(
         address = str(location).split(", ")
         print(", ".join(address[:3]))
 
-        return location
+        return ", ".join(address[:3])
 
     def get_centroid(row):
         centroid = row["geometry"].centroid
@@ -165,6 +161,10 @@ with DAG(
         print(buildings)
 
         buildings.to_csv("/opt/airflow/dags/geocoded_buildings_without_addresses_part4.csv")
+
+    def get_reviews():
+        pass
+
 
     get_city_geometry_task = PythonOperator(
         task_id="get_city_geometry",
