@@ -163,7 +163,18 @@ with DAG(
         buildings.to_csv("/opt/airflow/dags/geocoded_buildings_without_addresses_part4.csv")
 
     def get_reviews():
-        pass
+        import pandas as pd
+        from Yandex_parser import GrabberApp
+
+        data = pd.read_csv("/opt/airflow/dags/geocoded_buildings_without_addresses_part4.csv")
+
+        addresses = data["address"].tolist()
+
+        for address in addresses[0:10]:
+            grabber = GrabberApp(address)
+            data = grabber.grab_data()
+            name = address.replace(',', '_').replace(' ', '_').replace("/", "_")
+            data.to_csv(f"./data/{name}.csv")
 
 
     get_city_geometry_task = PythonOperator(
@@ -208,9 +219,16 @@ with DAG(
         provide_context=True,
     )
 
+    reviews_task = PythonOperator(
+        task_id="get_reviews",
+        python_callable=get_reviews,
+        provide_context=True,
+    )
+
 (
     get_city_geometry_task
     >> get_all_buildings_task
     >> split_buildings_task
     >> [geocode_buildings_task1, geocode_buildings_task2, geocode_buildings_task3, geocode_buildings_task4]
+    >> reviews_task
 )

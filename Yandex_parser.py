@@ -16,8 +16,8 @@ import pandas as pd
 
 class GrabberApp:
 
-    def __init__(self, city):
-        self.city = city
+    def __init__(self, address):
+        self.address = address
         self.df = pd.DataFrame({"place": [], "review": [], "date": []})
 
         # chrome_options.add_argument("--no-sandbox")
@@ -28,14 +28,14 @@ class GrabberApp:
         options = webdriver.ChromeOptions()
         #  options.add_argument("--headless")
         options.headless = False
-        options.page_load_strategy = "none"
+        #  options.page_load_strategy = "none"
 
         chrome_path = ChromeDriverManager().install()
         chrome_service = Service(chrome_path)
         self.driver = Chrome(options=options, service=chrome_service)
 
     def wait_for_presence(self, item):
-        for i in range(10):
+        for i in range(5):
             try:
                 WebDriverWait(self.driver, 3).until(
                     EC.presence_of_element_located(
@@ -48,6 +48,7 @@ class GrabberApp:
 
     def grab_data(self):
         #  self.driver.maximize_window()
+        print(self.address)
         self.driver.get('https://yandex.ru/maps')
 
         self.wait_for_presence('(//input[contains(@class,"input__control _bold")])')
@@ -55,7 +56,7 @@ class GrabberApp:
         # Вводим данные поиска
         self.driver.find_element(
             By.XPATH, '(//input[contains(@class,"input__control _bold")])'
-        ).send_keys(self.city)
+        ).send_keys(self.address)
 
         self.wait_for_presence('(//div[contains(@class,"small-search-form-view__icon _type_search")])')
         # Нажимаем на кнопку поиска
@@ -70,6 +71,7 @@ class GrabberApp:
             ).click()
         except:
             self.driver.quit()
+            return self.df
 
         parent_handle = self.driver.window_handles[0]
         i = 2
@@ -166,8 +168,8 @@ class GrabberApp:
 
 
 def main():
-    city = input('Область поиска: ')
-    grabber = GrabberApp(city)
+    address = input('Область поиска: ')
+    grabber = GrabberApp(address)
     data = grabber.grab_data()
     data.to_csv("data.csv")
 
