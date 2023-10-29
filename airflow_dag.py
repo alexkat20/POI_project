@@ -8,13 +8,12 @@ from kubernetes.client import models as k8s
 import pip
 import geopandas as gpd
 from tqdm import tqdm
+
 tqdm.pandas()
 
 from pandarallel import pandarallel
-pandarallel.initialize(progress_bar=True)
 
-pip.main(['install', "osmnx"])
-pip.main(['uninstall', "pyOpenSSL"])
+pandarallel.initialize(progress_bar=True)
 
 
 default_args = {
@@ -43,6 +42,7 @@ with DAG(
     start_date=airflow.utils.dates.days_ago(1),
     catchup=False,
 ) as dag:
+
     def geocode_null_addresses(row):
         from geopy.geocoders import Nominatim
         import geopy
@@ -63,7 +63,6 @@ with DAG(
 
         return location
 
-
     def get_centroid(row):
         centroid = row["geometry"].centroid
 
@@ -77,7 +76,6 @@ with DAG(
         print(territory)
 
         #  territory.to_file('city_geometry.geojson', driver='GeoJSON')
-
 
     def get_all_buildings(territory: str = "Миасс, Челябинская область"):
         import osmnx as ox
@@ -112,20 +110,61 @@ with DAG(
         buildings_without_addresses.to_csv("/opt/airflow/dags/buildings_without_addresses.csv")
         print(buildings_without_addresses)
 
-
-    def geocode_buildings():
+    def geocode_buildings_first_part():
         import pandas as pd
-        import geopandas as gpd
 
         buildings = pd.read_csv("/opt/airflow/dags/buildings_without_addresses.csv")
-        print(buildings)
-        #  buildings["adddress"] = buildings.apply(geocode_null_addresses, axis=1)
-        buildings["adddress"] = buildings.parallel_apply(geocode_null_addresses, axis=1)
+
+        length = len(buildings) // 4
+
+        buildings = buildings.loc[:length]
+
+        buildings["adddress"] = buildings.apply(geocode_null_addresses, axis=1)
 
         print(buildings)
 
-        buildings.to_csv("/opt/airflow/dags/geocoded_buildings_without_addresses.csv")
+        buildings.to_csv("/opt/airflow/dags/geocoded_buildings_without_addresses_part1.csv")
 
+    def geocode_buildings_second_part():
+        import pandas as pd
+
+        buildings = pd.read_csv("/opt/airflow/dags/buildings_without_addresses.csv")
+
+        length = len(buildings) // 4
+
+        buildings = buildings.loc[length : length * 2]
+
+        buildings["adddress"] = buildings.apply(geocode_null_addresses, axis=1)
+
+        print(buildings)
+
+        buildings.to_csv("/opt/airflow/dags/geocoded_buildings_without_addresses_part2.csv")
+
+    def geocode_buildings_third_part():
+        import pandas as pd
+
+        buildings = pd.read_csv("/opt/airflow/dags/buildings_without_addresses.csv")
+        length = len(buildings) // 4
+
+        buildings = buildings.loc[length * 2 : length * 3]
+        buildings["adddress"] = buildings.apply(geocode_null_addresses, axis=1)
+
+        print(buildings)
+
+        buildings.to_csv("/opt/airflow/dags/geocoded_buildings_without_addresses_part3.csv")
+
+    def geocode_buildings_fourth_part():
+        import pandas as pd
+
+        buildings = pd.read_csv("/opt/airflow/dags/buildings_without_addresses.csv")
+        length = len(buildings) // 4
+
+        buildings = buildings.loc[length * 3 :]
+        buildings["adddress"] = buildings.apply(geocode_null_addresses, axis=1)
+
+        print(buildings)
+
+        buildings.to_csv("/opt/airflow/dags/geocoded_buildings_without_addresses_part4.csv")
 
     get_city_geometry_task = PythonOperator(
         task_id="get_city_geometry",
@@ -145,10 +184,33 @@ with DAG(
         provide_context=True,
     )
 
-    geocode_buildings_task = PythonOperator(
-        task_id="geocode_buildings",
-        python_callable=geocode_buildings,
+    geocode_buildings_task1 = PythonOperator(
+        task_id="geocode_buildings1",
+        python_callable=geocode_buildings_first_part,
         provide_context=True,
     )
 
-get_city_geometry_task >> get_all_buildings_task >> split_buildings_task >> geocode_buildings_task
+    geocode_buildings_task2 = PythonOperator(
+        task_id="geocode_buildings2",
+        python_callable=geocode_buildings_second_part,
+        provide_context=True,
+    )
+
+    geocode_buildings_task3 = PythonOperator(
+        task_id="geocode_buildings3",
+        python_callable=geocode_buildings_third_part,
+        provide_context=True,
+    )
+
+    geocode_buildings_task4 = PythonOperator(
+        task_id="geocode_buildings4",
+        python_callable=geocode_buildings_fourth_part,
+        provide_context=True,
+    )
+
+(
+    get_city_geometry_task
+    >> get_all_buildings_task
+    >> split_buildings_task
+    >> [geocode_buildings_task1, geocode_buildings_task2, geocode_buildings_task3, geocode_buildings_task4]
+)
