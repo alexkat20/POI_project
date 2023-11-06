@@ -1,11 +1,7 @@
-import time
-
 from selenium import webdriver
-from selenium.webdriver import ActionChains
-from selenium.common.exceptions import NoSuchElementException
-from bs4 import BeautifulSoup
+
 from time import sleep
-from selenium.webdriver import Chrome
+from selenium.webdriver import Chrome, Remote
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
@@ -15,48 +11,36 @@ import pandas as pd
 
 
 class GrabberApp:
-
     def __init__(self, address):
         self.address = address
         self.df = pd.DataFrame({"place": [], "review": [], "date": []})
 
-        # chrome_options.add_argument("--no-sandbox")
-        # chrome_options.add_argument("--window-size=1420,1080")
-
-        # chrome_options.add_argument("--disable-gpu")
-
         options = webdriver.ChromeOptions()
-        #  options.add_argument("--headless")
         options.headless = False
-        #  options.page_load_strategy = "none"
+        #  options.add_argument('--disable-dev-shm-usage')
 
         chrome_path = ChromeDriverManager().install()
-        chrome_service = Service(chrome_path)
-        self.driver = Chrome(options=options, service=chrome_service)
+        #  chrome_service = Service(chrome_path)
+        remote_webdriver = "remote_chromedriver"
+        #  http://172.18.0.4:4444
+        self.driver = Remote(f"{remote_webdriver}:4444/wd/hub", options=options)
 
     def wait_for_presence(self, item):
         for i in range(5):
             try:
-                WebDriverWait(self.driver, 3).until(
-                    EC.presence_of_element_located(
-                        (By.XPATH, item)
-                    )
-                )
+                WebDriverWait(self.driver, 3).until(EC.presence_of_element_located((By.XPATH, item)))
             except:
                 continue
-
 
     def grab_data(self):
         #  self.driver.maximize_window()
         print(self.address)
-        self.driver.get('https://yandex.ru/maps')
+        self.driver.get("https://yandex.ru/maps")
 
         self.wait_for_presence('(//input[contains(@class,"input__control _bold")])')
 
         # Вводим данные поиска
-        self.driver.find_element(
-            By.XPATH, '(//input[contains(@class,"input__control _bold")])'
-        ).send_keys(self.address)
+        self.driver.find_element(By.XPATH, '(//input[contains(@class,"input__control _bold")])').send_keys(self.address)
 
         self.wait_for_presence('(//div[contains(@class,"small-search-form-view__icon _type_search")])')
         # Нажимаем на кнопку поиска
@@ -89,7 +73,7 @@ class GrabberApp:
                     link = el.get_attribute("href")
                     if "review" in link:
                         url = link
-                print(url)
+                #  print(url)
                 org_info.location_once_scrolled_into_view
                 if not url:
                     i += 1
@@ -100,21 +84,23 @@ class GrabberApp:
                 self.driver.switch_to.window(child_handle)
 
                 try:
-
-                    self.wait_for_presence(
-                        '(//div[contains(@class,"rating-ranking-view")])')
-                    self.driver.find_element(
-                        By.XPATH, f'(//div[contains(@class,"rating-ranking-view")])'
-                    ).click()
+                    self.wait_for_presence('(//div[contains(@class,"rating-ranking-view")])')
+                    self.driver.find_element(By.XPATH, f'(//div[contains(@class,"rating-ranking-view")])').click()
                     self.driver.find_element(
                         By.XPATH, f'(//div[contains(@class,"rating-ranking-view__popup-line")])[2]'
                     ).click()
 
-                    self.wait_for_presence('(//div[contains(@class,"tabs-select-view__title _name_reviews _selected")])')
+                    self.wait_for_presence(
+                        '(//div[contains(@class,"tabs-select-view__title _name_reviews _selected")])'
+                    )
 
-                    review_number = self.driver.find_element(
-                        By.XPATH, f'(//div[contains(@class,"tabs-select-view__title _name_reviews _selected")])'
-                    ).get_attribute("aria-label").split(", ")[1]
+                    review_number = (
+                        self.driver.find_element(
+                            By.XPATH, f'(//div[contains(@class,"tabs-select-view__title _name_reviews _selected")])'
+                        )
+                        .get_attribute("aria-label")
+                        .split(", ")[1]
+                    )
 
                     j = 0
                 except:
@@ -125,10 +111,8 @@ class GrabberApp:
                     continue
                 self.wait_for_presence(f'(//h1[contains(@class,"orgpage-header-view__header")])')
 
-                place = self.driver.find_element(
-                    By.XPATH, f'(//h1[contains(@class,"orgpage-header-view__header")])'
-                )
-                print(place.text)
+                place = self.driver.find_element(By.XPATH, f'(//h1[contains(@class,"orgpage-header-view__header")])')
+                #  print(place.text)
                 while j != int(review_number):
                     if j % 20 == 0:
                         sleep(2)
@@ -165,14 +149,3 @@ class GrabberApp:
 
         self.driver.quit()
         return self.df
-
-
-def main():
-    address = input('Область поиска: ')
-    grabber = GrabberApp(address)
-    data = grabber.grab_data()
-    data.to_csv("data.csv")
-
-
-if __name__ == '__main__':
-    main()

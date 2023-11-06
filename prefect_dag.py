@@ -3,6 +3,7 @@ from prefect import flow, task
 
 def geocode_null_addresses(row):
     from geopy.geocoders import Nominatim
+
     geolocator = Nominatim(user_agent="POI_app")
     centroid = row["geometry"].centroid
     lat = centroid.y
@@ -17,6 +18,7 @@ def get_centroid(row):
     centroid = row["geometry"].centroid
 
     return centroid
+
 
 @task
 def get_city_geometry(city: str = "Миасс, Челябинская область"):
@@ -59,7 +61,7 @@ def geocode_buildings(buildings):
 def get_city_buildings(city_name: str = "Миасс, Челябинская область"):
     city_geometry = get_city_geometry(city_name)
     buildings_with_addresses, buildings_without_addresses = get_all_buildings(city_name)
-    city_geometry.to_file('city_geometry.geojson', driver='GeoJSON')
+    city_geometry.to_file("city_geometry.geojson", driver="GeoJSON")
     print(buildings_with_addresses)
     #  buildings_with_addresses.to_csv('buildings_with_addresses.csv')
     #  buildings_without_addresses.to_file('buildings_without_addresses.geojson', driver='GeoJSON')

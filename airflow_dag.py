@@ -138,7 +138,7 @@ with DAG(
         buildings = pd.read_csv("/opt/airflow/dags/buildings_without_addresses.csv")
         length = len(buildings) // 4
 
-        buildings = buildings.loc[length * 2: length * 3]
+        buildings = buildings.loc[length * 2 : length * 3]
         buildings["address"] = buildings.apply(geocode_null_addresses, axis=1)
 
         print(buildings)
@@ -173,9 +173,9 @@ with DAG(
         for address in addresses[0:10]:
             grabber = GrabberApp(address)
             data = grabber.grab_data()
-            name = address.replace(',', '_').replace(' ', '_').replace("/", "_")
-            data.to_csv(f"./data/{name}.csv")
-
+            name = address.replace(",", "_").replace(" ", "_").replace("/", "_")
+            print(data)
+            #  data.to_csv(f"./{name}.csv")
 
     get_city_geometry_task = PythonOperator(
         task_id="get_city_geometry",

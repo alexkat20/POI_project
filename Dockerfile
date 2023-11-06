@@ -5,10 +5,10 @@ WORKDIR /usr/src/app
 
 COPY requirements.txt ./
 
+USER root
+
 RUN pip install --no-cache-dir --upgrade pip \
   && pip install --no-cache-dir -r requirements.txt
   && pip uninstall pyOpenSSL
 
 COPY . .
-
-#  CMD ["python", "./your-daemon-or-script.py"]
