@@ -3,6 +3,9 @@ from airflow import DAG
 
 from airflow.operators.python import PythonOperator
 from datetime import timedelta
+import pip
+
+pip.main(["install", "vk"])
 
 
 default_args = {
@@ -55,6 +58,7 @@ with DAG(
         centroid = row["geometry"].centroid
 
         return centroid
+
 
     def get_city_geometry(city: str = "Миасс, Челябинская область"):
         import osmnx as ox
@@ -177,6 +181,18 @@ with DAG(
             print(data)
             #  data.to_csv(f"./{name}.csv")
 
+    def get_vk_groups(query="Новокуйбышевск"):
+        import vk
+
+        token = "vk1.a.JnoCwGWUs_3-iONmrB1h-WgKvXHbyER_pZ9CWrIE37_1UKFdaTDLOLgMsdtyiTyulz9F8kBh0IJBrTdm_qMtpPsx_sX3S9bt1Uy2ndrYAqBeK19TvXjo8bgV7JgDShU-YghTstW9_qnIqwljMi_ABYy3WjOH6Q4O57boz1h-YEz3zLE0o6f0Y50cPCkHRLNUOVkZ2K_xQ_hkJVJC9Xiy4w"
+        vk_api = vk.API(access_token=token)
+
+        search_groups = vk_api.groups.search(q=query, sort=6, v="5.131")
+        groups = [search_groups["items"][i]["screen_name"] for i in range(len(search_groups["items"]))]
+        print(groups)
+
+
+
     get_city_geometry_task = PythonOperator(
         task_id="get_city_geometry",
         python_callable=get_city_geometry,
@@ -225,10 +241,16 @@ with DAG(
         provide_context=True,
     )
 
+    vk_groups_task = PythonOperator(
+        task_id="get_vk_groups",
+        python_callable=get_vk_groups,
+        provide_context=True,
+    )
+
 (
     get_city_geometry_task
-    >> get_all_buildings_task
-    >> split_buildings_task
-    >> [geocode_buildings_task1, geocode_buildings_task2, geocode_buildings_task3, geocode_buildings_task4]
-    >> reviews_task
+    >> [get_all_buildings_task, vk_groups_task]
+   #   >> split_buildings_task
+   #   >> [geocode_buildings_task1, geocode_buildings_task2, geocode_buildings_task3, geocode_buildings_task4]
+    #  >> reviews_task
 )
