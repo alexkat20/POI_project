@@ -4,8 +4,17 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import timedelta
 import pip
+import os
+import sys
+import shutil
+
+# Get directory name
+
+#  shutil.rmtree("/home/airflow/.local/lib/python3.9/site-packages/OpenSSL")
 
 
+
+pip.main(["install", "pyOpenSSL==22.0.0"])
 
 default_args = {
     "owner": "Alexander Katynsus",
@@ -68,7 +77,11 @@ with DAG(
         buildings["lat"] = buildings.centroid.y
         buildings["lon"] = buildings.centroid.x
 
-        buildings = buildings.set_crs(4326)
+        buildings = buildings.drop(columns=["centroid"])
+
+        print(buildings)
+
+        #  buildings = buildings.set_crs(4326)
 
         buildings.to_file("/opt/airflow/dags/buildings.geojson", driver='GeoJSON')
 
