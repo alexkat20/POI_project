@@ -61,7 +61,7 @@ with DAG(
     def modify_buildings():
         import geopandas as gpd
 
-        buildings = gpd.read_file("/opt/airflow/dags/building.geojson")
+        buildings = gpd.read_file("/opt/airflow/dags/buildings.geojson")
 
         buildings["centroid"] = buildings.apply(get_centroid, axis=1)
 
