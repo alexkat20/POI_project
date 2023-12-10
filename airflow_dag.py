@@ -1,9 +1,12 @@
 import airflow
+import pandas as pd
 from airflow import DAG
 
 from airflow.operators.python import PythonOperator
-from datetime import timedelta
+from datetime import timedelta, datetime
 import pip
+import vk
+import time
 
 pip.main(["install", "vk"])
 
@@ -33,6 +36,15 @@ with DAG(
     start_date=airflow.utils.dates.days_ago(1),
     catchup=False,
 ) as dag:
+    token = "vk1.a.JnoCwGWUs_3-iONmrB1h-WgKvXHbyER_pZ9CWrIE37_1UKFdaTDLOLgMsdtyiTyulz9F8kBh0IJBrTdm_qMtpPsx_sX3S9bt1Uy2ndrYAqBeK19TvXjo8bgV7JgDShU-YghTstW9_qnIqwljMi_ABYy3WjOH6Q4O57boz1h-YEz3zLE0o6f0Y50cPCkHRLNUOVkZ2K_xQ_hkJVJC9Xiy4w"
+    vk_api = vk.API(access_token=token)
+
+    start_date = datetime.now().date()
+
+    final_date = start_date - timedelta(days=7)
+
+    start_date, final_date = time.mktime(start_date.timetuple()), time.mktime(final_date.timetuple())
+    latitude, longitude = 53.0816435, 49.9100919
 
     def geocode_null_addresses(row):
         from geopy.geocoders import Nominatim
@@ -182,14 +194,102 @@ with DAG(
             #  data.to_csv(f"./{name}.csv")
 
     def get_vk_groups(query="Новокуйбышевск"):
-        import vk
-
-        token = "vk1.a.JnoCwGWUs_3-iONmrB1h-WgKvXHbyER_pZ9CWrIE37_1UKFdaTDLOLgMsdtyiTyulz9F8kBh0IJBrTdm_qMtpPsx_sX3S9bt1Uy2ndrYAqBeK19TvXjo8bgV7JgDShU-YghTstW9_qnIqwljMi_ABYy3WjOH6Q4O57boz1h-YEz3zLE0o6f0Y50cPCkHRLNUOVkZ2K_xQ_hkJVJC9Xiy4w"
-        vk_api = vk.API(access_token=token)
 
         search_groups = vk_api.groups.search(q=query, sort=6, v="5.131")
         groups = [search_groups["items"][i]["screen_name"] for i in range(len(search_groups["items"]))]
-        print(groups)
+
+        return groups
+
+
+    def get_posts(domain, offset, count, start_date):
+        for i in range(100):
+            try:
+                result = vk_api.wall.get(domain=domain, offset=offset, count=count, v="5.131")
+                result = [[result["items"][i]["text"], result["items"][i]["date"]] for i in
+                          range(len(result["items"]))]
+                return result
+            except:
+                continue
+        return [["", start_date]]
+
+    def get_group_posts():
+        import pandas as pd
+
+        groups = get_vk_groups()
+
+        groups_posts = pd.DataFrame({"group_name": [], "post": [], "date": []})
+
+        for i in range(len(groups)):
+            if i % 5 == 0:
+                time.sleep(1)
+            print(i)
+            group_info = []
+            current_info = get_posts(domain=groups[i], offset=0, count=10, start_date=start_date)
+            if len(current_info) == 0 or current_info[0][1] < final_date:
+                continue
+            group_info += current_info
+            j = 1
+            while current_info and start_date > current_info[0][1] > final_date:
+                current_info = get_posts(domain=groups[i], offset=10 * j, count=10, start_date=start_date)
+                j += 1
+                for post in current_info:
+                    print(post)
+                    groups_posts.loc[groups_posts.shape[0]] = {"group_name": groups[i],
+                                                               "post": post[0],
+                                                               "date": post[1]}
+
+        groups_posts.to_csv("/opt/airflow/dags/groups_posts.csv")
+
+
+    def get_news(query="Новокуйбышевск"):
+        import time
+        global start_date
+
+        step = 800
+
+        city_posts = pd.DataFrame({"group_name": [],
+                                                       "post": [],
+                                                       "date": []})
+
+        while start_date >= final_date:
+            search_by_query = vk_api.newsfeed.search(q=query, count=200, v="5.131", start_time=final_date,
+                                                     end_time=start_date)
+            search_by_query = [search_by_query["items"][i]["text"] for i in range(len(search_by_query["items"]))]
+            start_date -= step
+            for post in search_by_query:
+                city_posts.loc[city_posts.shape[0]] = {"group_name": query,
+                                                       "post": post[0],
+                                                       "date": post[1]}
+            time.sleep(0.3)
+
+        city_posts.to_csv("/opt/airflow/dags/city_posts.csv")
+
+
+    def get_photos():
+        import time
+
+        step = 800
+
+        city_photos = pd.DataFrame({"post": [],
+                                  "date": []})
+
+        while start_date >= final_date:
+            search_by_coordinates = vk_api.photos.search(count=1000, latitude=latitude, longitude=longitude,
+                                                         v="5.131", start_time=start_date, end_time=final_date,
+                                                         radius=50000)
+            search_by_coordinates = [search_by_coordinates["items"][i]["text"] for i in
+                                     range(len(search_by_coordinates["items"]))]
+            start_date -= step
+            for post in search_by_coordinates:
+                city_photos.loc[city_photos.shape[0]] = {"post": post[0],
+                                                       "date": post[1]}
+
+            time.sleep(0.3)
+
+        city_photos.to_csv("/opt/airflow/dags/city_photos.csv")
+
+    def recognize_places():
+        pass
 
 
 
@@ -242,14 +342,26 @@ with DAG(
     )
 
     vk_groups_task = PythonOperator(
-        task_id="get_vk_groups",
-        python_callable=get_vk_groups,
+        task_id="get_group_posts",
+        python_callable=get_group_posts,
+        provide_context=True,
+    )
+
+    vk_news_task = PythonOperator(
+        task_id="get_photos",
+        python_callable=get_photos,
+        provide_context=True,
+    )
+
+    vk_photos_task = PythonOperator(
+        task_id="get_news",
+        python_callable=get_news,
         provide_context=True,
     )
 
 (
     get_city_geometry_task
-    >> [get_all_buildings_task, vk_groups_task]
+    >> [get_all_buildings_task, vk_groups_task, vk_news_task, vk_photos_task]
    #   >> split_buildings_task
    #   >> [geocode_buildings_task1, geocode_buildings_task2, geocode_buildings_task3, geocode_buildings_task4]
     #  >> reviews_task
