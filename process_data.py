@@ -5,6 +5,11 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import timedelta, datetime
 import pip
+
+pip.main(["install", "vk"])
+pip.main(["install", "stanza"])
+
+
 import vk
 import time
 import stanza

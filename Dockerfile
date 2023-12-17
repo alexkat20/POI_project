@@ -5,10 +5,11 @@ WORKDIR /usr/src/app
 
 COPY requirements.txt ./
 
-USER root
+USER airflow
 
 RUN pip install --no-cache-dir --upgrade pip \
-  && pip install --no-cache-dir -r requirements.txt \
-  && pip uninstall pyOpenSSL
+  && pip install --no-cache-dir -r requirements.txt
+
+USER root
 
 COPY . .
