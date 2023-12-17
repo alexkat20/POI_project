@@ -8,7 +8,7 @@ COPY requirements.txt ./
 USER root
 
 RUN pip install --no-cache-dir --upgrade pip \
-  && pip install --no-cache-dir -r requirements.txt
+  && pip install --no-cache-dir -r requirements.txt \
   && pip uninstall pyOpenSSL
 
 COPY . .
