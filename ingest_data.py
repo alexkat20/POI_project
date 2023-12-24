@@ -26,7 +26,7 @@ default_args = {
 
 
 with DAG(
-    dag_id="POI_DAG",
+    dag_id="Ingest_data_DAG",
     default_args=default_args,
     # schedule_interval='0 0 * * *',
     schedule_interval="@once",
@@ -73,13 +73,16 @@ with DAG(
         return centroid
 
     def get_city_geometry(city: str = "Новокуйбышевск"):
+        import geopandas as gpd
         import osmnx as ox
 
         territory = ox.geocode_to_gdf(city)
 
         print(territory)
 
-        #  territory.to_file('city_geometry.geojson', driver='GeoJSON')
+        gdf_territory = gpd.GeoDataFrame(territory, geometry="geometry")
+
+        gdf_territory.to_file('/airflow/dags/city_geometry.geojson', driver='GeoJSON')
 
     def get_all_buildings(territory: str = "Новокуйбышевск"):
         import osmnx as ox
@@ -125,6 +128,8 @@ with DAG(
 
         buildings["address"] = buildings.apply(geocode_null_addresses, axis=1)
 
+        buildings = buildings[buildings["address"] != "Undefined"]
+
         print(buildings)
 
         buildings = buildings.drop_duplicates(["address"], ignore_index=True)
@@ -144,6 +149,8 @@ with DAG(
 
         print(buildings)
 
+        buildings = buildings[buildings["address"] != "Undefined"]
+
         buildings = buildings.drop_duplicates(["address"], ignore_index=True)
 
         buildings.to_csv("/opt/airflow/dags/geocoded_buildings_without_addresses_part2.csv")
@@ -156,6 +163,8 @@ with DAG(
 
         buildings = buildings.loc[length * 2 : length * 3]
         buildings["address"] = buildings.apply(geocode_null_addresses, axis=1)
+
+        buildings = buildings[buildings["address"] != "Undefined"]
 
         print(buildings)
 
@@ -172,6 +181,8 @@ with DAG(
         buildings = buildings.loc[length * 3 :]
         buildings["address"] = buildings.apply(geocode_null_addresses, axis=1)
 
+        buildings = buildings[buildings["address"] != "Undefined"]
+
         print(buildings)
 
         buildings = buildings.drop_duplicates(["address"], ignore_index=True)
@@ -181,6 +192,17 @@ with DAG(
     def get_reviews():
         import pandas as pd
         from Yandex_parser import GrabberApp
+
+        data = pd.read_csv(f"/opt/airflow/dags/buildings_with_addresses.csv")
+
+        addresses = data["address"].tolist()
+
+        for address in addresses[0:10]:
+            grabber = GrabberApp(address)
+            data = grabber.grab_data()
+            name = address.replace(",", "_").replace(" ", "_").replace("/", "_")
+            print(data)
+            data.to_csv(f"./{name}.csv")
 
         for i in range(1, 5):
             data = pd.read_csv(f"/opt/airflow/dags/geocoded_buildings_without_addresses_part{i}.csv")
@@ -218,7 +240,7 @@ with DAG(
         groups_posts = pd.DataFrame({"group_name": [], "post": [], "date": []})
 
         for i in range(len(groups)):
-            if i % 4 == 0:
+            if i % 3 == 0:
                 time.sleep(1)
             group_info = []
             current_info = get_posts(domain=groups[i], offset=0, count=10, start_date=start_date)
