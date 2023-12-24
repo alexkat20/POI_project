@@ -82,7 +82,7 @@ with DAG(
 
         gdf_territory = gpd.GeoDataFrame(territory, geometry="geometry")
 
-        gdf_territory.to_file('/airflow/dags/city_geometry.geojson', driver='GeoJSON')
+        gdf_territory.to_file('/opt/airflow/dags/city_geometry.geojson', driver='GeoJSON')
 
     def get_all_buildings(territory: str = "Новокуйбышевск"):
         import osmnx as ox
@@ -105,6 +105,8 @@ with DAG(
 
         buildings = pd.read_csv("/opt/airflow/dags/buildings.csv")
 
+        city = "Новокуйбышевск"
+
         cols = ["name", "geometry", "addr:street", "addr:housenumber", "centroid", "lat", "lon"]
 
         buildings_with_addresses = buildings[~buildings["addr:housenumber"].isna()][cols]
@@ -112,6 +114,9 @@ with DAG(
 
         #  buildings_with_addresses[["name", "addr:street", "addr:housenumber"]].to_csv("buildings_with_addresses.csv")
         #  buildings_without_addresses.to_file("buildings_without_addresses.geojson", driver="GeoJSON")
+
+        buildings_with_addresses["address"] = city + " " + buildings_with_addresses["addr:street"] + " " + buildings_with_addresses["addr:housenumber"]
+        print(buildings_with_addresses)
 
         buildings_with_addresses.to_csv("/opt/airflow/dags/buildings_with_addresses.csv")
         buildings_without_addresses.to_csv("/opt/airflow/dags/buildings_without_addresses.csv")
@@ -197,19 +202,25 @@ with DAG(
 
         addresses = data["address"].tolist()
 
-        for address in addresses[0:10]:
-            grabber = GrabberApp(address)
-            data = grabber.grab_data()
-            name = address.replace(",", "_").replace(" ", "_").replace("/", "_")
-            print(data)
-            data.to_csv(f"./{name}.csv")
+        for address in addresses:
+            try:
+                grabber = GrabberApp(address)
+                data = grabber.grab_data()
+                name = address.replace(",", "_").replace(" ", "_").replace("/", "_")
+                if len(data) != 0:
+                    print(name)
+                    data.to_csv(f"/opt/airflow/dags/data/{name}.csv")
+                else:
+                    print("Empty DataFrame")
+            except:
+                print("Error")
 
         for i in range(1, 5):
             data = pd.read_csv(f"/opt/airflow/dags/geocoded_buildings_without_addresses_part{i}.csv")
 
             addresses = data["address"].tolist()
 
-            for address in addresses[0:10]:
+            for address in addresses:
                 grabber = GrabberApp(address)
                 data = grabber.grab_data()
                 name = address.replace(",", "_").replace(" ", "_").replace("/", "_")
@@ -281,6 +292,7 @@ with DAG(
             search_by_query = [[search_by_query["items"][i]["text"], search_by_query["items"][i]["date"]] for i in range(len(search_by_query["items"]))]
             start_date -= step
             for post in search_by_query:
+                print(post)
                 city_posts.loc[city_posts.shape[0]] = {"city_name": query, "post": post[0], "date": post[1]}
             time.sleep(1)
 
