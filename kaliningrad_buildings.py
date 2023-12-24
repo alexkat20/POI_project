@@ -13,7 +13,6 @@ import shutil
 #  shutil.rmtree("/home/airflow/.local/lib/python3.9/site-packages/OpenSSL")
 
 
-
 pip.main(["install", "pyOpenSSL==22.0.0"])
 
 default_args = {
@@ -83,8 +82,7 @@ with DAG(
 
         #  buildings = buildings.set_crs(4326)
 
-        buildings.to_file("/opt/airflow/dags/buildings.geojson", driver='GeoJSON')
-
+        buildings.to_file("/opt/airflow/dags/buildings.geojson", driver="GeoJSON")
 
     def geocode_buildings_first_part():
         import geopandas as gpd
@@ -101,7 +99,7 @@ with DAG(
 
         buildings = buildings.drop_duplicates(["address"], ignore_index=True)
 
-        buildings.to_file("/opt/airflow/dags/geocoded_buildings_part1.geojson", driver='GeoJSON')
+        buildings.to_file("/opt/airflow/dags/geocoded_buildings_part1.geojson", driver="GeoJSON")
 
     def geocode_buildings_second_part():
         import geopandas as gpd
@@ -118,7 +116,7 @@ with DAG(
 
         buildings = buildings.drop_duplicates(["address"], ignore_index=True)
 
-        buildings.to_file("/opt/airflow/dags/geocoded_buildings_part2.geojson", driver='GeoJSON')
+        buildings.to_file("/opt/airflow/dags/geocoded_buildings_part2.geojson", driver="GeoJSON")
 
     def geocode_buildings_third_part():
         import geopandas as gpd
@@ -126,14 +124,14 @@ with DAG(
         buildings = gpd.read_file("/opt/airflow/dags/buildings.geojson")
         length = len(buildings) // 4
 
-        buildings = buildings.loc[length * 2: length * 3]
+        buildings = buildings.loc[length * 2 : length * 3]
         buildings["address"] = buildings.apply(geocode_null_addresses, axis=1)
 
         print(buildings)
 
         buildings = buildings.drop_duplicates(["address"], ignore_index=True)
 
-        buildings.to_file("/opt/airflow/dags/geocoded_buildings_part3.geojson", driver='GeoJSON')
+        buildings.to_file("/opt/airflow/dags/geocoded_buildings_part3.geojson", driver="GeoJSON")
 
     def geocode_buildings_fourth_part():
         import geopandas as gpd
@@ -148,16 +146,13 @@ with DAG(
 
         buildings = buildings.drop_duplicates(["address"], ignore_index=True)
 
-        buildings.to_file("/opt/airflow/dags/geocoded_buildings_part4.geojson", driver='GeoJSON')
-
-
+        buildings.to_file("/opt/airflow/dags/geocoded_buildings_part4.geojson", driver="GeoJSON")
 
     get_city_geometry_task = PythonOperator(
         task_id="modify_buildings",
         python_callable=modify_buildings,
         provide_context=True,
     )
-
 
     geocode_buildings_task1 = PythonOperator(
         task_id="geocode_buildings1",
@@ -187,5 +182,4 @@ with DAG(
 (
     get_city_geometry_task
     >> [geocode_buildings_task1, geocode_buildings_task2, geocode_buildings_task3, geocode_buildings_task4]
-
 )

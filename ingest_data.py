@@ -35,7 +35,6 @@ with DAG(
     start_date=airflow.utils.dates.days_ago(1),
     catchup=False,
 ) as dag:
-
     token = "vk1.a.JnoCwGWUs_3-iONmrB1h-WgKvXHbyER_pZ9CWrIE37_1UKFdaTDLOLgMsdtyiTyulz9F8kBh0IJBrTdm_qMtpPsx_sX3S9bt1Uy2ndrYAqBeK19TvXjo8bgV7JgDShU-YghTstW9_qnIqwljMi_ABYy3WjOH6Q4O57boz1h-YEz3zLE0o6f0Y50cPCkHRLNUOVkZ2K_xQ_hkJVJC9Xiy4w"
     vk_api = vk.API(access_token=token)
 
@@ -45,7 +44,6 @@ with DAG(
 
     start_date, final_date = time.mktime(start_date.timetuple()), time.mktime(final_date.timetuple())
     latitude, longitude = 53.0816435, 49.9100919
-
 
     def geocode_null_addresses(row):
         from geopy.geocoders import Nominatim
@@ -82,7 +80,7 @@ with DAG(
 
         gdf_territory = gpd.GeoDataFrame(territory, geometry="geometry")
 
-        gdf_territory.to_file('/opt/airflow/dags/city_geometry.geojson', driver='GeoJSON')
+        gdf_territory.to_file("/opt/airflow/dags/city_geometry.geojson", driver="GeoJSON")
 
     def get_all_buildings(territory: str = "Новокуйбышевск"):
         import osmnx as ox
@@ -115,7 +113,9 @@ with DAG(
         #  buildings_with_addresses[["name", "addr:street", "addr:housenumber"]].to_csv("buildings_with_addresses.csv")
         #  buildings_without_addresses.to_file("buildings_without_addresses.geojson", driver="GeoJSON")
 
-        buildings_with_addresses["address"] = city + " " + buildings_with_addresses["addr:street"] + " " + buildings_with_addresses["addr:housenumber"]
+        buildings_with_addresses["address"] = (
+            city + " " + buildings_with_addresses["addr:street"] + " " + buildings_with_addresses["addr:housenumber"]
+        )
         print(buildings_with_addresses)
 
         buildings_with_addresses.to_csv("/opt/airflow/dags/buildings_with_addresses.csv")
@@ -289,7 +289,10 @@ with DAG(
             search_by_query = vk_api.newsfeed.search(
                 q=query, count=200, v="5.131", start_time=final_date, end_time=start_date
             )
-            search_by_query = [[search_by_query["items"][i]["text"], search_by_query["items"][i]["date"]] for i in range(len(search_by_query["items"]))]
+            search_by_query = [
+                [search_by_query["items"][i]["text"], search_by_query["items"][i]["date"]]
+                for i in range(len(search_by_query["items"]))
+            ]
             start_date -= step
             for post in search_by_query:
                 print(post)
@@ -322,7 +325,8 @@ with DAG(
                 radius=50000,
             )
             search_by_coordinates = [
-                [search_by_coordinates["items"][i]["text"], search_by_coordinates["items"][i]["date"]] for i in range(len(search_by_coordinates["items"]))
+                [search_by_coordinates["items"][i]["text"], search_by_coordinates["items"][i]["date"]]
+                for i in range(len(search_by_coordinates["items"]))
             ]
             start_date -= step
             for post in search_by_coordinates:
@@ -332,7 +336,6 @@ with DAG(
             time.sleep(1)
 
         city_photos.to_csv("/opt/airflow/dags/city_photos.csv")
-
 
     get_city_geometry_task = PythonOperator(
         task_id="get_city_geometry",
@@ -401,8 +404,11 @@ with DAG(
     )
 
 (
-    get_city_geometry_task >> get_all_buildings_task
-    >> vk_groups_task >> vk_news_task >> vk_photos_task
+    get_city_geometry_task
+    >> get_all_buildings_task
+    >> vk_groups_task
+    >> vk_news_task
+    >> vk_photos_task
     >> split_buildings_task
     >> [geocode_buildings_task1, geocode_buildings_task2, geocode_buildings_task3, geocode_buildings_task4]
     >> reviews_task
