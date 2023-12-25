@@ -106,6 +106,22 @@ with DAG(
 
         return pd.Series(places)
 
+    def analyze_yandex_text(row):
+        text = row["review"]
+
+        places = {"emotions": [], "keywords": []}
+
+        text = remove_emoji(text)
+
+        predicted_emotion = predict_emotion(text)
+
+        keywords = get_keywords(text)
+
+        places["emotions"].append(emotions[predicted_emotion[0]])
+        places["keywords"].append(keywords)
+
+        return pd.Series(places)
+
     def process_vk_groups_data():
         data = pd.read_csv("/opt/airflow/dags/groups_posts.csv")
 
@@ -128,7 +144,12 @@ with DAG(
         data.to_csv("/opt/airflow/dags/processed_data/city_photos_processed.csv")
 
     def process_yandex_data():
-        pass
+        data = pd.read_csv("/opt/airflow/dags/processed_data/buildings_with_addresses.csv")
+
+        data[["emotions", "keywords"]] = data.apply(analyze_yandex_text, axis=1)
+
+        data.to_csv("/opt/airflow/dags/processed_data/processed_buildings_with_addresses.csv")
+
 
     def finish():
         print("DONE!")

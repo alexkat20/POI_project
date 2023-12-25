@@ -197,23 +197,31 @@ with DAG(
     def get_reviews():
         import pandas as pd
         from Yandex_parser import GrabberApp
+        import shutil
 
-        data = pd.read_csv(f"/opt/airflow/dags/buildings_with_addresses.csv")
+        final_data = pd.DataFrame({"place": [], "review": [], "date": [], "location": []})
+
+        data = pd.read_csv("/opt/airflow/dags/buildings_with_addresses.csv")
+        final_data.to_csv("/opt/airflow/dags/processed_data/buildings_with_addresses.csv")
 
         addresses = data["address"].tolist()
+        locations = data["geometry"].to_list()
 
-        for address in addresses:
+        for i in range(len(addresses)):
             try:
-                grabber = GrabberApp(address)
-                data = grabber.grab_data()
-                name = address.replace(",", "_").replace(" ", "_").replace("/", "_")
+                final_data = pd.read_csv("/opt/airflow/dags/processed_data/buildings_with_addresses.csv")
+                grabber = GrabberApp(addresses[i])
+                data = grabber.grab_data(locations[i])
+                name = addresses[i].replace(",", "_").replace(" ", "_").replace("/", "_")
                 if len(data) != 0:
                     print(name)
-                    data.to_csv(f"/opt/airflow/dags/data/{name}.csv")
+                    pd.concat([final_data, data]).to_csv("/opt/airflow/dags/processed_data/buildings_with_addresses.csv")
+                    shutil.rmtree("../home/.wdm/drivers/chromedriver/linux64/")
+                    #  data.to_csv(f"/opt/airflow/dags/data/{name}.csv")
                 else:
                     print("Empty DataFrame")
-            except:
-                print("Error")
+            except Exception as e:
+                print(e)
 
         for i in range(1, 5):
             data = pd.read_csv(f"/opt/airflow/dags/geocoded_buildings_without_addresses_part{i}.csv")

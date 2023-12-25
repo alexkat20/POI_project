@@ -13,7 +13,7 @@ import pandas as pd
 class GrabberApp:
     def __init__(self, address):
         self.address = address
-        self.df = pd.DataFrame({"place": [], "review": [], "date": []})
+        self.df = pd.DataFrame({"place": [], "review": [], "date": [], "location": []})
 
         options = webdriver.ChromeOptions()
         options.headless = False
@@ -32,7 +32,7 @@ class GrabberApp:
             except:
                 continue
 
-    def grab_data(self):
+    def grab_data(self, location):
         #  self.driver.maximize_window()
         print(self.address)
         self.driver.get("https://yandex.ru/maps")
@@ -130,7 +130,8 @@ class GrabberApp:
                     )
 
                     #  print(review.text, date.text)
-                    self.df.loc[len(self.df)] = {"place": place.text, "review": review.text, "date": date.text}
+                    self.df.loc[len(self.df)] = {"place": place.text, "review": review.text,
+                                                 "date": date.text, "location": location}
 
                     if len(date.text.split()) > 2:
                         i += 1
