@@ -227,13 +227,22 @@ with DAG(
             data = pd.read_csv(f"/opt/airflow/dags/geocoded_buildings_without_addresses_part{i}.csv")
 
             addresses = data["address"].tolist()
+            locations = data["geometry"].to_list()
 
-            for address in addresses:
-                grabber = GrabberApp(address)
-                data = grabber.grab_data()
-                name = address.replace(",", "_").replace(" ", "_").replace("/", "_")
-                print(data)
-                data.to_csv(f"./{name}.csv")
+            for j in range(len(addresses)):
+                try:
+                    final_data = pd.read_csv("/opt/airflow/dags/processed_data/buildings_with_addresses.csv")
+                    grabber = GrabberApp(addresses[j])
+                    data = grabber.grab_data(locations[j])
+                    name = addresses[j].replace(",", "_").replace(" ", "_").replace("/", "_")
+                    if len(data) != 0:
+                        print(name)
+                        pd.concat([final_data, data]).to_csv("/opt/airflow/dags/processed_data/buildings_with_addresses.csv")
+                        shutil.rmtree("../home/.wdm/drivers/chromedriver/linux64/")
+                    else:
+                        print("Empty DataFrame")
+                except Exception as e:
+                    print(e)
 
     def get_vk_groups(query="Новокуйбышевск"):
         search_groups = vk_api.groups.search(q=query, sort=6, v="5.131")
@@ -285,13 +294,13 @@ with DAG(
 
         start_date = datetime.now().date()
 
-        final_date = start_date - timedelta(days=7)
+        final_date = start_date - timedelta(days=3)
 
         start_date, final_date = time.mktime(start_date.timetuple()), time.mktime(final_date.timetuple())
 
         step = 800
 
-        city_posts = pd.DataFrame({"group_name": [], "post": [], "date": []})
+        city_posts = pd.DataFrame({"city_name": [], "post": [], "date": []})
 
         while start_date >= final_date:
             search_by_query = vk_api.newsfeed.search(
