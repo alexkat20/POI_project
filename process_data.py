@@ -89,68 +89,16 @@ with DAG(
         except:
             return "Undefined"
 
-    def deprecated_stanza_nlp_ru(text):
-        doc = nlp(text)
-        return [[ent.text, ent.type] for sent in doc.sentences for ent in sent.ents]
-
-    def deprecated_predict_emotion(text):
-
-        tokenizer = pickle.load(open("/opt/airflow/dags/models/tokenizer.pkl", 'rb'))
-        model = pickle.load(open("/opt/airflow/dags/models/bert_model.pkl", 'rb'))
-
-        inputs = tokenizer(text, max_length=512, padding=True, truncation=True, return_tensors="pt")
-        outputs = model(**inputs)
-        predicted = torch.nn.functional.softmax(outputs.logits, dim=1)
-        predicted = torch.argmax(predicted, dim=1).numpy()
-        return predicted
 
     def geocode_place(place):
+        from shapely import Point
+
         geolocator = ArcGIS(user_agent="POI")
 
         location = geolocator.geocode(f"{city_name} {place}", timeout=10)
 
-        return location
+        return Point(location.longitude, location.latitude)
 
-    def deprecated_analyze_text(row):
-        text = row["post"]
-        print(text)
-
-        places = {"places_names": [], "places": [], "emotions": [], "keywords": []}
-
-        text = remove_emoji(text)
-
-        predicted_emotion = predict_emotion(text)
-
-        entities = stanza_nlp_ru(text)
-
-        keywords = get_keywords(text)
-
-        for ent in entities:
-            if ent[1] == "LOC" or ent[1] == "ORG":
-                if ent[0].lower() != city_name.lower() and ent[0].lower() != "россия":
-                    location = geocode_place(ent[0])
-                    places["places_names"].append(ent[0])
-                    places["places"].append(location)
-                    places["emotions"].append(emotions[predicted_emotion[0]])
-                    places["keywords"].append(keywords)
-
-        return pd.Series(places)
-
-    def deprecated_analyze_yandex_text(row):
-        text = row["review"]
-
-        places = {"emotions": [], "keywords": []}
-
-        text = remove_emoji(text)
-
-        predicted_emotion = predict_emotion(text)
-
-        keywords = get_keywords(text)
-
-        places["emotions"].append(emotions[predicted_emotion[0]])
-        places["keywords"].append(keywords)
-
-        return pd.Series(places)
 
     def process_vk_groups_data():
 
@@ -179,8 +127,8 @@ with DAG(
             entities = [[ent.text, ent.type] for sent in doc.sentences for ent in sent.ents]
 
             try:
-                keywords = kw_model.extract_keywords(text, keyphrase_ngram_range=(1, 3),
-                                                 stop_words=stopwords.words("russian"))
+                keywords = [kw[0] for kw in kw_model.extract_keywords(text, keyphrase_ngram_range=(1, 3),
+                                                 stop_words=stopwords.words("russian"))]
             except:
                 return "Undefined"
 
@@ -227,8 +175,8 @@ with DAG(
             entities = [[ent.text, ent.type] for sent in doc.sentences for ent in sent.ents]
 
             try:
-                keywords = kw_model.extract_keywords(text, keyphrase_ngram_range=(1, 3),
-                                                 stop_words=stopwords.words("russian"))
+                keywords = [kw[0] for kw in kw_model.extract_keywords(text, keyphrase_ngram_range=(1, 3),
+                                                                      stop_words=stopwords.words("russian"))]
             except:
                 return "Undefined"
 
@@ -276,8 +224,8 @@ with DAG(
             entities = [[ent.text, ent.type] for sent in doc.sentences for ent in sent.ents]
 
             try:
-                keywords = kw_model.extract_keywords(text, keyphrase_ngram_range=(1, 3),
-                                                     stop_words=stopwords.words("russian"))
+                keywords = [kw[0] for kw in kw_model.extract_keywords(text, keyphrase_ngram_range=(1, 3),
+                                                                      stop_words=stopwords.words("russian"))]
             except:
                 return "Undefined"
 
@@ -317,8 +265,8 @@ with DAG(
             predicted_emotion = torch.argmax(predicted, dim=1).numpy()
 
             try:
-                keywords = kw_model.extract_keywords(text, keyphrase_ngram_range=(1, 3),
-                                                     stop_words=stopwords.words("russian"))
+                keywords = [kw[0] for kw in kw_model.extract_keywords(text, keyphrase_ngram_range=(1, 3),
+                                                                      stop_words=stopwords.words("russian"))]
             except:
                 return "Undefined"
 
