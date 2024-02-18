@@ -8,11 +8,11 @@ from selenium.webdriver.support.wait import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support import expected_conditions as EC
 import pandas as pd
+from shapely import Point
 
 
 class GrabberApp:
-    def __init__(self, address):
-        self.address = address
+    def __init__(self):
         self.df = pd.DataFrame({"place": [], "review": [], "date": [], "location": []})
 
         options = webdriver.ChromeOptions()
@@ -32,15 +32,15 @@ class GrabberApp:
             except:
                 continue
 
-    def grab_data(self, location):
+    def grab_data(self, location, address):
         #  self.driver.maximize_window()
-        print(self.address)
+        print(address)
         self.driver.get("https://yandex.ru/maps")
 
         self.wait_for_presence('(//input[contains(@class,"input__control _bold")])')
 
         # Вводим данные поиска
-        self.driver.find_element(By.XPATH, '(//input[contains(@class,"input__control _bold")])').send_keys(self.address)
+        self.driver.find_element(By.XPATH, '(//input[contains(@class,"input__control _bold")])').send_keys(address)
 
         self.wait_for_presence('(//div[contains(@class,"small-search-form-view__icon _type_search")])')
         # Нажимаем на кнопку поиска
@@ -54,7 +54,7 @@ class GrabberApp:
                 By.XPATH, f'(//div[contains(@class,"tabs-select-view__title _name_inside")])'
             ).click()
         except:
-            self.driver.quit()
+            #  self.driver.quit()
             return self.df
 
         parent_handle = self.driver.window_handles[0]
@@ -131,7 +131,7 @@ class GrabberApp:
 
                     #  print(review.text, date.text)
                     self.df.loc[len(self.df)] = {"place": place.text, "review": review.text,
-                                                 "date": date.text, "location": location}
+                                                 "date": date.text, "location": Point(location)}
 
                     if len(date.text.split()) > 2:
                         i += 1
@@ -148,5 +148,5 @@ class GrabberApp:
             except:
                 break
 
-        self.driver.quit()
+        #  self.driver.quit()
         return self.df

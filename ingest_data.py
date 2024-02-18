@@ -4,10 +4,18 @@ from airflow import DAG
 
 from airflow.operators.python import PythonOperator
 from datetime import timedelta, datetime
+from sqlalchemy import create_engine
+
+import osmnx as ox
+import geopandas as gpd
+
 
 import vk
 import time
 import re
+import pip
+
+from geoalchemy2 import Geometry
 
 
 default_args = {
@@ -45,13 +53,36 @@ with DAG(
     start_date, final_date = time.mktime(start_date.timetuple()), time.mktime(final_date.timetuple())
     latitude, longitude = 53.0816435, 49.9100919
 
+    def create_main_tables():
+        engine = create_engine(f'postgresql://docker:docker@postgis:5432/gis')
+
+        with engine.connect() as conn:
+            conn.execute("""
+            CREATE TABLE IF NOT EXISTS Buildings (index INT PRIMARY KEY,
+                  address TEXT,
+                  name TEXT,
+                  centroid GEOMETRY(Geometry, 4326),
+                  lat FLOAT,
+                  lon float)""")
+
+            conn.execute("""
+                    CREATE TABLE IF NOT EXISTS Reviews (
+                        place TEXT,
+                        review TEXT,
+                        date TEXT,
+                        location GEOMETRY(Point, 4326))""")
+
+            conn.execute("""
+                    CREATE TABLE IF NOT EXISTS Posts (
+                        group_name TEXT, post TEXT, date BIGINT)""")
+
     def geocode_null_addresses(row):
         from geopy.geocoders import Nominatim
         import geopy
 
         API_KEY = " Avs8af3bGJxAbDECx-tEiM3C53lXeIOCX53-SV-StILZI6OUJq_F4wZ6kIS2RPWn"
         #  geolocator = Nominatim(user_agent="POI_app")
-        geolocator = geopy.geocoders.Bing(API_KEY)
+        geolocator = geopy.geocoders.Bing(API_KEY, timeout=5)
         lat = row["lat"]
         lon = row["lon"]
 
@@ -83,7 +114,8 @@ with DAG(
         gdf_territory.to_file("/opt/airflow/dags/city_geometry.geojson", driver="GeoJSON")
 
     def get_all_buildings(territory: str = "Новокуйбышевск"):
-        import osmnx as ox
+
+        engine = create_engine('postgresql://docker:docker@postgis:5432/gis')
 
         buildings = ox.geometries_from_place(territory, {"building": True})
         buildings = buildings.reset_index()
@@ -93,39 +125,29 @@ with DAG(
         buildings["lat"] = buildings.centroid.y
         buildings["lon"] = buildings.centroid.x
 
-        buildings = buildings.set_crs(4326)
-
-        buildings.to_csv("/opt/airflow/dags/buildings.csv")
-        print(buildings)
-
-    def split_buildings():
-        import pandas as pd
-
-        buildings = pd.read_csv("/opt/airflow/dags/buildings.csv")
+        cols = ["name", "address", "centroid", "lat", "lon"]
 
         city = "Новокуйбышевск"
 
-        cols = ["name", "geometry", "addr:street", "addr:housenumber", "centroid", "lat", "lon"]
-
-        buildings_with_addresses = buildings[~buildings["addr:housenumber"].isna()][cols]
-        buildings_without_addresses = buildings[buildings["addr:housenumber"].isna()][cols]
-
-        #  buildings_with_addresses[["name", "addr:street", "addr:housenumber"]].to_csv("buildings_with_addresses.csv")
-        #  buildings_without_addresses.to_file("buildings_without_addresses.geojson", driver="GeoJSON")
-
-        buildings_with_addresses["address"] = (
-            city + " " + buildings_with_addresses["addr:street"] + " " + buildings_with_addresses["addr:housenumber"]
+        buildings["address"] = (
+                city + " " + buildings["addr:street"] + " " + buildings["addr:housenumber"]
         )
-        print(buildings_with_addresses)
 
-        buildings_with_addresses.to_csv("/opt/airflow/dags/buildings_with_addresses.csv")
-        buildings_without_addresses.to_csv("/opt/airflow/dags/buildings_without_addresses.csv")
-        print(buildings_without_addresses)
+        buildings = gpd.GeoDataFrame(buildings, geometry="centroid")
+
+        buildings = buildings.set_crs(4326)
+
+        buildings_new = buildings[cols]
+
+        buildings_new.to_postgis("buildings", engine, if_exists='replace', index=True,
+                                 dtype={'centroid': Geometry('POINT', srid=4326)})
 
     def geocode_buildings_first_part():
-        import pandas as pd
+        import geopandas as gpd
 
-        buildings = pd.read_csv("/opt/airflow/dags/buildings_without_addresses.csv")
+        engine = create_engine('postgresql://docker:docker@postgis:5432/gis')
+
+        buildings = gpd.read_postgis('select * from Buildings where address is Null', con=engine, geom_col="centroid")
 
         length = len(buildings) // 4
 
@@ -134,36 +156,38 @@ with DAG(
         buildings["address"] = buildings.apply(geocode_null_addresses, axis=1)
 
         buildings = buildings[buildings["address"] != "Undefined"]
-
-        print(buildings)
+        buildings = buildings.set_crs(4326)
 
         buildings = buildings.drop_duplicates(["address"], ignore_index=True)
 
-        buildings.to_csv("/opt/airflow/dags/geocoded_buildings_without_addresses_part1.csv")
+        buildings.to_postgis("buildings", engine, if_exists='append', index=False,
+                                 dtype={'centroid': Geometry('POINT', srid=4326)})
 
     def geocode_buildings_second_part():
-        import pandas as pd
 
-        buildings = pd.read_csv("/opt/airflow/dags/buildings_without_addresses.csv")
+        engine = create_engine('postgresql://docker:docker@postgis:5432/gis')
+
+        buildings = gpd.read_postgis('select * from Buildings where address is Null', con=engine, geom_col="centroid")
 
         length = len(buildings) // 4
 
-        buildings = buildings.loc[length : length * 2]
+        buildings = buildings.loc[length: length * 2]
 
         buildings["address"] = buildings.apply(geocode_null_addresses, axis=1)
-
-        print(buildings)
 
         buildings = buildings[buildings["address"] != "Undefined"]
 
         buildings = buildings.drop_duplicates(["address"], ignore_index=True)
 
-        buildings.to_csv("/opt/airflow/dags/geocoded_buildings_without_addresses_part2.csv")
+        buildings = buildings.set_crs(4326)
+
+        buildings.to_postgis("buildings", engine, if_exists='append', index=False,
+                             dtype={'centroid': Geometry('POINT', srid=4326)})
 
     def geocode_buildings_third_part():
-        import pandas as pd
+        engine = create_engine('postgresql://docker:docker@postgis:5432/gis')
 
-        buildings = pd.read_csv("/opt/airflow/dags/buildings_without_addresses.csv")
+        buildings = gpd.read_postgis('select * from Buildings where address is Null', con=engine, geom_col="centroid")
         length = len(buildings) // 4
 
         buildings = buildings.loc[length * 2 : length * 3]
@@ -171,16 +195,16 @@ with DAG(
 
         buildings = buildings[buildings["address"] != "Undefined"]
 
-        print(buildings)
-
         buildings = buildings.drop_duplicates(["address"], ignore_index=True)
+        buildings = buildings.set_crs(4326)
 
-        buildings.to_csv("/opt/airflow/dags/geocoded_buildings_without_addresses_part3.csv")
+        buildings.to_postgis("buildings", engine, if_exists='append', index=False,
+                             dtype={'centroid': Geometry('POINT', srid=4326)})
 
     def geocode_buildings_fourth_part():
-        import pandas as pd
+        engine = create_engine('postgresql://docker:docker@postgis:5432/gis')
 
-        buildings = pd.read_csv("/opt/airflow/dags/buildings_without_addresses.csv")
+        buildings = gpd.read_postgis('select * from Buildings where address is Null', con=engine, geom_col="centroid")
         length = len(buildings) // 4
 
         buildings = buildings.loc[length * 3 :]
@@ -188,61 +212,44 @@ with DAG(
 
         buildings = buildings[buildings["address"] != "Undefined"]
 
-        print(buildings)
-
         buildings = buildings.drop_duplicates(["address"], ignore_index=True)
+        buildings = buildings.set_crs(4326)
 
-        buildings.to_csv("/opt/airflow/dags/geocoded_buildings_without_addresses_part4.csv")
+        buildings.to_postgis("buildings", engine, if_exists='append', index=False,
+                             dtype={'centroid': Geometry('POINT', srid=4326)})
+
+        with engine.connect() as conn:
+            conn.execute("""DELETE FROM Buildings WHERE address IS NULL""")
 
     def get_reviews():
-        import pandas as pd
+        import geopandas as gpd
         from Yandex_parser import GrabberApp
-        import shutil
+        from shapely import Point
 
-        final_data = pd.DataFrame({"place": [], "review": [], "date": [], "location": []})
+        engine = create_engine('postgresql://docker:docker@postgis:5432/gis')
 
-        data = pd.read_csv("/opt/airflow/dags/buildings_with_addresses.csv")
-        final_data.to_csv("/opt/airflow/dags/processed_data/buildings_with_addresses.csv")
+        data = gpd.read_postgis('select * from Buildings', con=engine, geom_col="centroid")
 
         addresses = data["address"].tolist()
-        locations = data["geometry"].to_list()
+        locations: list[Point] = data["centroid"].to_list()
+
+        grabber = GrabberApp()
 
         for i in range(len(addresses)):
             try:
-                final_data = pd.read_csv("/opt/airflow/dags/processed_data/buildings_with_addresses.csv")
-                grabber = GrabberApp(addresses[i])
-                data = grabber.grab_data(locations[i])
+                data = grabber.grab_data(locations[i], addresses[i])
                 name = addresses[i].replace(",", "_").replace(" ", "_").replace("/", "_")
                 if len(data) != 0:
                     print(name)
-                    pd.concat([final_data, data]).to_csv("/opt/airflow/dags/processed_data/buildings_with_addresses.csv")
-                    shutil.rmtree("../home/.wdm/drivers/chromedriver/linux64/")
-                    #  data.to_csv(f"/opt/airflow/dags/data/{name}.csv")
+                    print(data)
+                    data = gpd.GeoDataFrame(data, geometry="location", crs=4326)
+                    data.to_postgis("reviews", engine, if_exists='append', index=False,
+                             dtype={'location': Geometry('POINT', srid=4326)})
                 else:
                     print("Empty DataFrame")
             except Exception as e:
                 print(e)
-
-        for i in range(1, 5):
-            data = pd.read_csv(f"/opt/airflow/dags/geocoded_buildings_without_addresses_part{i}.csv")
-
-            addresses = data["address"].tolist()
-            locations = data["geometry"].to_list()
-
-            for j in range(len(addresses)):
-                try:
-                    final_data = pd.read_csv("/opt/airflow/dags/processed_data/buildings_with_addresses.csv")
-                    grabber = GrabberApp(addresses[j])
-                    data = grabber.grab_data(locations[j])
-                    name = addresses[j].replace(",", "_").replace(" ", "_").replace("/", "_")
-                    if len(data) != 0:
-                        print(name)
-                        pd.concat([final_data, data]).to_csv("/opt/airflow/dags/processed_data/buildings_with_addresses.csv")
-                        shutil.rmtree("../home/.wdm/drivers/chromedriver/linux64/")
-                    else:
-                        print("Empty DataFrame")
-                except Exception as e:
-                    print(e)
+        grabber.driver.quit()
 
     def get_vk_groups(query="Новокуйбышевск"):
         search_groups = vk_api.groups.search(q=query, sort=6, v="5.131")
@@ -263,6 +270,8 @@ with DAG(
     def get_group_posts():
         import pandas as pd
 
+        engine = create_engine('postgresql://docker:docker@postgis:5432/gis')
+
         groups = get_vk_groups()
 
         groups_posts = pd.DataFrame({"group_name": [], "post": [], "date": []})
@@ -280,17 +289,18 @@ with DAG(
                 current_info = get_posts(domain=groups[i], offset=10 * j, count=10, start_date=start_date)
                 j += 1
                 for post in current_info:
-                    print(post)
                     groups_posts.loc[groups_posts.shape[0]] = {
                         "group_name": groups[i],
                         "post": post[0],
                         "date": post[1],
                     }
 
-        groups_posts.to_csv("/opt/airflow/dags/groups_posts.csv")
+        groups_posts.to_sql("posts", engine, if_exists='append', index=False)
 
     def get_news(query="Новокуйбышевск"):
         import time
+
+        engine = create_engine('postgresql://docker:docker@postgis:5432/gis')
 
         start_date = datetime.now().date()
 
@@ -300,7 +310,7 @@ with DAG(
 
         step = 800
 
-        city_posts = pd.DataFrame({"city_name": [], "post": [], "date": []})
+        city_posts = pd.DataFrame({"group_name": [], "post": [], "date": []})
 
         while start_date >= final_date:
             search_by_query = vk_api.newsfeed.search(
@@ -312,14 +322,15 @@ with DAG(
             ]
             start_date -= step
             for post in search_by_query:
-                print(post)
-                city_posts.loc[city_posts.shape[0]] = {"city_name": query, "post": post[0], "date": post[1]}
+                city_posts.loc[city_posts.shape[0]] = {"group_name": query, "post": post[0], "date": post[1]}
             time.sleep(1)
 
-        city_posts.to_csv("/opt/airflow/dags/city_posts.csv")
+        city_posts.to_sql("posts", engine, if_exists='append', index=False)
 
-    def get_photos():
+    def get_photos(city="Новокуйбышевск"):
         import time
+
+        engine = create_engine('postgresql://docker:docker@postgis:5432/gis')
 
         start_date = datetime.now().date()
 
@@ -329,7 +340,7 @@ with DAG(
 
         step = 800
 
-        city_photos = pd.DataFrame({"post": [], "date": []})
+        city_photos = pd.DataFrame({"group_name": city, "post": [], "date": []})
 
         while start_date >= final_date:
             search_by_coordinates = vk_api.photos.search(
@@ -348,11 +359,18 @@ with DAG(
             start_date -= step
             for post in search_by_coordinates:
                 print(post)
-                city_photos.loc[city_photos.shape[0]] = {"post": post[0], "date": post[1]}
+                city_photos.loc[city_photos.shape[0]] = {"group_name": city, "post": post[0], "date": post[1]}
 
             time.sleep(1)
 
-        city_photos.to_csv("/opt/airflow/dags/city_photos.csv")
+        city_photos.to_sql("posts", engine, if_exists='append', index=False)
+
+
+    create_tables_task = PythonOperator(
+        task_id="create_tables",
+        python_callable=create_main_tables,
+        provide_context=True,
+    )
 
     get_city_geometry_task = PythonOperator(
         task_id="get_city_geometry",
@@ -363,12 +381,6 @@ with DAG(
     get_all_buildings_task = PythonOperator(
         task_id="get_all_buildings",
         python_callable=get_all_buildings,
-        provide_context=True,
-    )
-
-    split_buildings_task = PythonOperator(
-        task_id="split_buildings",
-        python_callable=split_buildings,
         provide_context=True,
     )
 
@@ -421,12 +433,12 @@ with DAG(
     )
 
 (
+    create_tables_task >>
     get_city_geometry_task
     >> get_all_buildings_task
     >> vk_groups_task
     >> vk_news_task
     >> vk_photos_task
-    >> split_buildings_task
     >> [geocode_buildings_task1, geocode_buildings_task2, geocode_buildings_task3, geocode_buildings_task4]
     >> reviews_task
 )
