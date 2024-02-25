@@ -143,17 +143,22 @@ with DAG(
                     if ent[0].lower() != city_name.lower() and ent[0].lower() != "россия":
                         location = geocode_place(ent[0])
 
-                        with engine.connect() as conn:
-                            stmt = f"""
-                            INSERT INTO Processed_posts (name, location, emotion TEXT, keywords)
-                            VALUES ({ent[0]}, {location}, {predicted_emotion[0]}, {keywords})
-                            """
-                            conn.execute(stmt)
-                            conn.commit()
+                        tmp_gdf = gpd.GeoDataFrame({"name": [f"{ent[0]}"], "location": [location],
+                                                    "emotion": [predicted_emotion[0]], "keywords": [keywords]},
+                                                   geometry="location", crs=4326)
+                        tmp_gdf.to_postgis(
+                            "processed_posts", engine, if_exists="append", index=False,
+                            dtype={"location": Geometry("POINT", srid=4326)}
+                        )
 
-        data = pd.read_sql_query("select * from posts where group_name <> Новокуйбышевск", con=engine)
+                return row
 
-        data[["places_names", "places", "emotions", "keywords"]] = data.apply(analyze_groups_text, axis=1)
+            data = pd.read_sql_query("select * from posts where group_name<>'Центральный район, Санкт-Петербург'",
+                                     con=engine)
+            print(len(data))
+            data = data.drop_duplicates(["post"])
+            print(len(data))
+            data.apply(analyze_groups_text, axis=1)
 
     def process_vk_news_data():
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -195,17 +200,22 @@ with DAG(
                     if ent[0].lower() != city_name.lower() and ent[0].lower() != "россия":
                         location = geocode_place(ent[0])
 
-                        with engine.connect() as conn:
-                            stmt = f"""
-                            INSERT INTO Processed_posts (name, location, emotion TEXT, keywords)
-                            VALUES ({ent[0]}, {location}, {predicted_emotion[0]}, {keywords})
-                            """
-                            conn.execute(stmt)
-                            conn.commit()
+                        tmp_gdf = gpd.GeoDataFrame({"name": [f"{ent[0]}"], "location": [location],
+                                                    "emotion": [predicted_emotion[0]], "keywords": [keywords]},
+                                                   geometry="location", crs=4326)
+                        tmp_gdf.to_postgis(
+                            "processed_posts", engine, if_exists="append", index=False,
+                            dtype={"location": Geometry("POINT", srid=4326)}
+                        )
 
-        data = pd.read_sql_query("select * from posts where group_name=Новокуйбышевск", con=engine)
+                return row
 
-        data[["places_names", "places", "emotions", "keywords"]] = data.apply(analyze_city_news, axis=1)
+            data = pd.read_sql_query("select * from posts where group_name<>'Центральный район, Санкт-Петербург'",
+                                     con=engine)
+            print(len(data))
+            data = data.drop_duplicates(["post"])
+            print(len(data))
+            data.apply(analyze_city_news, axis=1)
 
     def process_yandex_data():
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -221,6 +231,7 @@ with DAG(
         def analyze_yandex_text(row):
             text = str(row["review"])
             location = row["location"]
+            place = row["place"]
 
             text = remove_emoji(text)
 
@@ -231,31 +242,47 @@ with DAG(
 
             doc = nlp(text)
             entities = [[ent.text, ent.type] for sent in doc.sentences for ent in sent.ents]
-
             try:
-                keywords = [
+                keywords = " ".join([
                     kw[0]
                     for kw in kw_model.extract_keywords(
                         text, keyphrase_ngram_range=(1, 3), stop_words=stopwords.words("russian")
                     )
-                ]
+                ])
             except:
                 return "Undefined"
-
-            for ent in entities:
-                if ent[1] == "LOC" or ent[1] == "ORG":
-                    if ent[0].lower() != city_name.lower() and ent[0].lower() != "россия":
-                        with engine.connect() as conn:
-                            stmt = f"""
-                            INSERT INTO Processed_posts (name, location, emotion TEXT, keywords)
-                            VALUES ({ent[0]}, {location}, {predicted_emotion[0]}, {keywords})
-                            """
-                            conn.execute(stmt)
-                            conn.commit()
+            if entities:
+                for ent in entities:
+                    if ent[1] == "LOC" or ent[1] == "ORG":
+                        if ent[0].lower() != city_name.lower() and ent[0].lower() != "россия":
+                            tmp_gdf = gpd.GeoDataFrame({"name": [f"{place}, {ent[0]}"], "location": [location],
+                                                        "emotion": [predicted_emotion[0]], "keywords": [keywords]},
+                                                       geometry="location", crs=4326)
+                            tmp_gdf.to_postgis(
+                                "processed_posts", engine, if_exists="append", index=False,
+                                dtype={"location": Geometry("POINT", srid=4326)}
+                            )
+                    else:
+                        tmp_gdf = gpd.GeoDataFrame({"name": [f"{place}"], "location": [location],
+                                                    "emotion": [predicted_emotion[0]], "keywords": [keywords]},
+                                                   geometry="location", crs=4326)
+                        tmp_gdf.to_postgis(
+                            "processed_posts", engine, if_exists="append", index=False,
+                            dtype={"location": Geometry("POINT", srid=4326)}
+                        )
+            else:
+                tmp_gdf = gpd.GeoDataFrame({"name": [place], "location": [location],
+                                            "emotion": [predicted_emotion[0]], "keywords": [keywords]},
+                                           geometry="location", crs=4326)
+                tmp_gdf.to_postgis(
+                    "processed_posts", engine, if_exists="append", index=False,
+                    dtype={"location": Geometry("POINT", srid=4326)}
+                )
+            return row
 
         data = gpd.read_postgis("select * from reviews", con=engine, geom_col="location")
-
-        data[["emotions", "keywords"]] = data.apply(analyze_yandex_text, axis=1)
+        data = data.drop_duplicates(["review"])
+        data.apply(analyze_yandex_text, axis=1)
 
     def finish():
         print("FINALLY DONE!")

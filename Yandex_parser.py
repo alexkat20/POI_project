@@ -22,8 +22,9 @@ class GrabberApp:
         chrome_path = ChromeDriverManager().install()
         #  chrome_service = Service(chrome_path)
         remote_webdriver = "remote_chromedriver"
-        #  http://172.18.0.4:4444
+        #  http://172.18.0.4:4444 25.22.115.40
         self.driver = Remote(f"{remote_webdriver}:4444/wd/hub", options=options)
+        #  self.driver = webdriver.Chrome(options=options) for local development
 
     def wait_for_presence(self, item):
         for i in range(5):
@@ -129,6 +130,10 @@ class GrabberApp:
                         By.XPATH, f'(//span[contains(@class,"business-review-view__date")])[{j + 1}]'
                     )
 
+                    if len(date.text.split()) > 2:
+                        i += 1
+                        break
+
                     #  print(review.text, date.text)
                     self.df.loc[len(self.df)] = {
                         "place": place.text,
@@ -137,17 +142,13 @@ class GrabberApp:
                         "location": Point(location),
                     }
 
-                    if len(date.text.split()) > 2:
-                        i += 1
-                        break
-
                     j += 1
                 print("--------------------------------------------------------------------")
 
                 self.driver.close()
                 self.driver.switch_to.window(parent_handle)
 
-                i += 1
+                #  i += 1
 
             except:
                 break
