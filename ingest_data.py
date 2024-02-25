@@ -40,8 +40,11 @@ with DAG(
     start_date=airflow.utils.dates.days_ago(1),
     catchup=False,
 ) as dag:
-    token = "vk1.a.JnoCwGWUs_3-iONmrB1h-WgKvXHbyER_pZ9CWrIE37_1UKFdaTDLOLgMsdtyiTyulz9F8kBh0IJBrTdm_qMtpPsx_sX3S9bt1Uy2ndrYAqBeK19TvXjo8bgV7JgDShU-YghTstW9_qnIqwljMi_ABYy3WjOH6Q4O57boz1h-YEz3zLE0o6f0Y50cPCkHRLNUOVkZ2K_xQ_hkJVJC9Xiy4w"
-    vk_api = vk.API(access_token=token)
+    token1 = "vk1.a.JnoCwGWUs_3-iONmrB1h-WgKvXHbyER_pZ9CWrIE37_1UKFdaTDLOLgMsdtyiTyulz9F8kBh0IJBrTdm_qMtpPsx_sX3S9bt1Uy2ndrYAqBeK19TvXjo8bgV7JgDShU-YghTstW9_qnIqwljMi_ABYy3WjOH6Q4O57boz1h-YEz3zLE0o6f0Y50cPCkHRLNUOVkZ2K_xQ_hkJVJC9Xiy4w"
+    vk_api1 = vk.API(access_token=token1)
+
+    token2 = "vk1.a.359GX82kc5ZKeBjiumPqx1waHTZc9aSR5Tb7cSlaxD3wYuHBZgQ4ScwACD3KlOlh1tan9pnCIO2kaWwdGnp26RcuN9b8btcJeRWAxw8h6LSn8Zhpj83zaXqK6wIYpH2SkF61XcH7QFzvH_8DiCTt5LQgnkdDExwqazU6ak9LC5CW7ZjlYEt8Na4S8FtaKvnOL31No2SryZtL8ZRIeCx1rw"
+    vk_api2 = vk.API(access_token=token2)
 
     start_date = datetime.now().date()
 
@@ -80,11 +83,11 @@ with DAG(
             )
 
     def geocode_null_addresses(row):
-        from geopy.geocoders import Nominatim
+        from geopy.geocoders import ArcGIS
         import geopy
 
         API_KEY = " Avs8af3bGJxAbDECx-tEiM3C53lXeIOCX53-SV-StILZI6OUJq_F4wZ6kIS2RPWn"
-        #  geolocator = Nominatim(user_agent="POI_app")
+        #  geolocator = ArcGIS(user_agent="Tester", timeout=5)
         geolocator = geopy.geocoders.Bing(API_KEY, timeout=5)
         lat = row["lat"]
         lon = row["lon"]
@@ -104,7 +107,7 @@ with DAG(
 
         return centroid
 
-    def get_city_geometry(city: str = "Новокуйбышевск"):
+    def get_city_geometry(city: str = "Центральный район, Санкт-Петербург"):
         import geopandas as gpd
         import osmnx as ox
 
@@ -116,7 +119,7 @@ with DAG(
 
         gdf_territory.to_file("/opt/airflow/dags/city_geometry.geojson", driver="GeoJSON")
 
-    def get_all_buildings(territory: str = "Новокуйбышевск"):
+    def get_all_buildings(territory: str = "Центральный район, Санкт-Петербург"):
         engine = create_engine("postgresql://docker:docker@postgis:5432/gis")
 
         buildings = ox.geometries_from_place(territory, {"building": True})
@@ -129,7 +132,7 @@ with DAG(
 
         cols = ["name", "address", "centroid", "lat", "lon"]
 
-        city = "Новокуйбышевск"
+        city = "Центральный район, Санкт-Петербург"
 
         buildings["address"] = city + " " + buildings["addr:street"] + " " + buildings["addr:housenumber"]
 
@@ -260,8 +263,8 @@ with DAG(
                 print(e)
         grabber.driver.quit()
 
-    def get_vk_groups(query="Новокуйбышевск"):
-        search_groups = vk_api.groups.search(q=query, sort=6, v="5.131")
+    def get_vk_groups(query="Центральный район, Санкт-Петербург"):
+        search_groups = vk_api1.groups.search(q=query, sort=6, v="5.131")
         groups = [search_groups["items"][i]["screen_name"] for i in range(len(search_groups["items"]))]
 
         return groups
@@ -269,7 +272,7 @@ with DAG(
     def get_posts(domain, offset, count, start_date):
         for i in range(100):
             try:
-                result = vk_api.wall.get(domain=domain, offset=offset, count=count, v="5.131")
+                result = vk_api1.wall.get(domain=domain, offset=offset, count=count, v="5.131")
                 result = [[result["items"][i]["text"], result["items"][i]["date"]] for i in range(len(result["items"]))]
                 return result
             except:
@@ -306,7 +309,7 @@ with DAG(
 
         groups_posts.to_sql("posts", engine, if_exists="append", index=False)
 
-    def get_news(query="Новокуйбышевск"):
+    def get_news(query="Центральный район, Санкт-Петербург"):
         import time
 
         engine = create_engine("postgresql://docker:docker@postgis:5432/gis")
@@ -322,7 +325,7 @@ with DAG(
         city_posts = pd.DataFrame({"group_name": [], "post": [], "date": []})
 
         while start_date >= final_date:
-            search_by_query = vk_api.newsfeed.search(
+            search_by_query = vk_api2.newsfeed.search(
                 q=query, count=200, v="5.131", start_time=final_date, end_time=start_date
             )
             search_by_query = [
@@ -336,7 +339,7 @@ with DAG(
 
         city_posts.to_sql("posts", engine, if_exists="append", index=False)
 
-    def get_photos(city="Новокуйбышевск"):
+    def get_photos(city="Центральный район, Санкт-Петербург"):
         import time
 
         engine = create_engine("postgresql://docker:docker@postgis:5432/gis")
@@ -352,7 +355,7 @@ with DAG(
         city_photos = pd.DataFrame({"group_name": city, "post": [], "date": []})
 
         while start_date >= final_date:
-            search_by_coordinates = vk_api.photos.search(
+            search_by_coordinates = vk_api2.photos.search(
                 count=1000,
                 latitude=latitude,
                 longitude=longitude,
