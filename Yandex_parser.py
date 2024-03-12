@@ -129,7 +129,6 @@ class GrabberApp:
                     date = self.driver.find_element(
                         By.XPATH, f'(//span[contains(@class,"business-review-view__date")])[{j + 1}]'
                     )
-
                     if len(date.text.split()) > 2:
                         i += 1
                         break
@@ -143,12 +142,12 @@ class GrabberApp:
                     }
 
                     j += 1
+                    if j == int(review_number):
+                        i += 1
                 print("--------------------------------------------------------------------")
 
                 self.driver.close()
                 self.driver.switch_to.window(parent_handle)
-
-                #  i += 1
 
             except:
                 break
